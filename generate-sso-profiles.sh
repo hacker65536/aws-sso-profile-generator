@@ -184,6 +184,152 @@ add_batch_end_comment() {
     echo "# AWS_SSO_CONFIG_GENERATOR END $current_datetime" >> "$config_file"
 }
 
+# 既存プロファイルのチェック
+check_existing_profiles() {
+    local config_file="$1"
+    local prefix="$2"
+    local max_accounts="$3"
+    local normalization_type="$4"
+    
+    log_info "既存プロファイルとの重複をチェック中..."
+    
+    # 生成予定のプロファイル名を取得
+    local accounts_data
+    if ! accounts_data=$(get_accounts_data); then
+        log_error "アカウント一覧の取得に失敗しました"
+        log_info "既存プロファイルチェックをスキップして続行します"
+        return 0  # 通常処理を続行
+    fi
+    
+    local existing_profiles=()
+    local count=0
+    
+    # 一時ファイルを使用してアカウントデータを処理
+    local temp_accounts_file
+    temp_accounts_file=$(mktemp)
+    echo "$accounts_data" > "$temp_accounts_file"
+    
+    while IFS= read -r line && [ "$count" -lt "$max_accounts" ]; do
+        local account_id
+        local account_name
+        
+        account_id=$(echo "$line" | grep -o '^[0-9]\+')
+        account_name=$(echo "$line" | sed 's/^[0-9][0-9]* //')
+        
+        if [ -n "$account_id" ] && [ -n "$account_name" ]; then
+            # このアカウントのロール一覧を取得
+            local roles_data
+            if roles_data=$(get_account_roles_data "$account_id" 2>/dev/null); then
+                # 一時ファイルを使用してロールデータを処理
+                local temp_roles_file
+                temp_roles_file=$(mktemp)
+                echo "$roles_data" > "$temp_roles_file"
+                
+                while IFS= read -r role_name; do
+                    if [ -n "$role_name" ]; then
+                        local profile_name
+                        profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
+                        
+                        # 既存プロファイルかチェック
+                        if grep -q "^\[profile $profile_name\]" "$config_file" 2>/dev/null; then
+                            existing_profiles+=("$profile_name")
+                        fi
+                    fi
+                done < "$temp_roles_file"
+                
+                rm -f "$temp_roles_file"
+            else
+                log_debug "アカウント $account_id のロール取得をスキップしました"
+            fi
+            
+            count=$((count + 1))
+        fi
+    done < "$temp_accounts_file"
+    
+    rm -f "$temp_accounts_file"
+    
+    # 既存プロファイルがある場合の確認
+    if [ ${#existing_profiles[@]} -gt 0 ]; then
+        echo
+        log_warning "既存プロファイルとの重複が検出されました"
+        echo
+        echo "重複するプロファイル数: ${#existing_profiles[@]} 個"
+        echo
+        echo "重複するプロファイル名（最初の10個）:"
+        for i in "${!existing_profiles[@]}"; do
+            if [ $i -lt 10 ]; then
+                echo "  - ${existing_profiles[i]}"
+            fi
+        done
+        
+        if [ ${#existing_profiles[@]} -gt 10 ]; then
+            echo "  ... 他 $((${#existing_profiles[@]} - 10)) 個"
+        fi
+        
+        echo
+        log_info "既存プロファイルの処理方法を選択してください:"
+        echo "  1. 上書きする（既存プロファイルを削除してから新しいプロファイルを追加）"
+        echo "  2. スキップする（既存プロファイルはそのままで、新しいプロファイルのみ追加）"
+        echo "  3. キャンセル（プロファイル生成を中止）"
+        echo
+        
+        local overwrite_choice
+        while true; do
+            read -r -p "選択してください (1/2/3): " overwrite_choice
+            case "$overwrite_choice" in
+                1)
+                    log_info "既存プロファイルを上書きします"
+                    return 0  # 上書きモード
+                    ;;
+                2)
+                    log_info "既存プロファイルをスキップします"
+                    return 1  # スキップモード
+                    ;;
+                3)
+                    log_info "プロファイル生成をキャンセルしました"
+                    return 2  # キャンセル
+                    ;;
+                *)
+                    echo "無効な選択です。1、2、または3を入力してください。"
+                    ;;
+            esac
+        done
+    else
+        log_success "既存プロファイルとの重複はありません"
+        return 0  # 重複なし、通常処理
+    fi
+}
+
+# 既存プロファイルの削除
+remove_existing_profile() {
+    local config_file="$1"
+    local profile_name="$2"
+    
+    # プロファイルの開始行を検索
+    local start_line
+    start_line=$(grep -n "^\[profile $profile_name\]" "$config_file" | cut -d: -f1)
+    
+    if [ -n "$start_line" ]; then
+        # 次のプロファイルまたはセクションの開始行を検索
+        local end_line
+        end_line=$(tail -n +$((start_line + 1)) "$config_file" | grep -n "^\[" | head -1 | cut -d: -f1)
+        
+        if [ -n "$end_line" ]; then
+            # 次のセクションがある場合
+            end_line=$((start_line + end_line - 1))
+            sed -i.bak "${start_line},${end_line}d" "$config_file"
+        else
+            # ファイルの最後まで削除
+            sed -i.bak "${start_line},\$d" "$config_file"
+        fi
+        
+        # バックアップファイルを削除
+        rm -f "${config_file}.bak"
+        
+        log_debug "既存プロファイルを削除しました: $profile_name"
+    fi
+}
+
 # 複数アカウントのプロファイル自動生成
 generate_profiles_for_accounts() {
     local config_file="$1"
@@ -191,6 +337,7 @@ generate_profiles_for_accounts() {
     local max_accounts="$3"
     local region="$4"
     local normalization_type="$5"
+    local overwrite_mode="${6:-true}"  # デフォルトは上書きモード
     
     log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
     
@@ -243,11 +390,31 @@ generate_profiles_for_accounts() {
                         local profile_name
                         profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
                         
-                        create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                        # 既存プロファイルのチェック
+                        local profile_exists=false
+                        if grep -q "^\[profile $profile_name\]" "$config_file" 2>/dev/null; then
+                            profile_exists=true
+                        fi
                         
-                        log_success "プロファイル作成: $profile_name"
-                        role_count=$((role_count + 1))
-                        total_profiles=$((total_profiles + 1))
+                        if [ "$profile_exists" = true ]; then
+                            if [ "$overwrite_mode" = true ]; then
+                                # 上書きモード：既存プロファイルを削除してから作成
+                                remove_existing_profile "$config_file" "$profile_name"
+                                create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                                log_success "プロファイル上書き: $profile_name"
+                                role_count=$((role_count + 1))
+                                total_profiles=$((total_profiles + 1))
+                            else
+                                # スキップモード：既存プロファイルをスキップ
+                                log_info "プロファイルスキップ: $profile_name (既存)"
+                            fi
+                        else
+                            # 新規プロファイル作成
+                            create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                            log_success "プロファイル作成: $profile_name"
+                            role_count=$((role_count + 1))
+                            total_profiles=$((total_profiles + 1))
+                        fi
                     fi
                 done < "$temp_roles_file"
                 
@@ -374,9 +541,28 @@ main() {
     echo "  minimal:  '$(normalize_account_name_minimal "My Perfect-Web-Service Prod")'"
     echo
     
+    # 既存プロファイルのチェック
+    local overwrite_mode=true
+    check_existing_profiles "$config_file" "$prefix" "$max_accounts" "$normalization_type"
+    local check_result=$?
+    
+    case $check_result in
+        0)
+            overwrite_mode=true  # 上書きモードまたは重複なし
+            ;;
+        1)
+            overwrite_mode=false  # スキップモード
+            ;;
+        2)
+            log_info "プロファイル生成をキャンセルしました"
+            exit 0
+            ;;
+    esac
+    
+    echo
     read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type"
+        generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$overwrite_mode"
         echo
         log_success "プロファイル自動生成が完了しました！"
         log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
