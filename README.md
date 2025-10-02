@@ -23,6 +23,7 @@ AWS SSO 環境でのプロファイル管理を効率化するツール群で、
 ## インストール
 
 ### AWS CLI v2
+
 ```bash
 # macOS
 curl "https://awscli.amazonaws.com/AWSCLIV2.pkg" -o "AWSCLIV2.pkg"
@@ -33,12 +34,14 @@ brew install awscli
 ```
 
 ### jq
+
 ```bash
 # macOS (Homebrew)
 brew install jq
 ```
 
 ### Bash (macOS の場合)
+
 ```bash
 # macOS (Homebrew) - 新しいバージョンが必要な場合
 brew install bash
@@ -47,15 +50,17 @@ brew install bash
 ## クイックスタート
 
 1. **全体セットアップの実行**
+
    ```bash
    ./setup-aws-sso.sh
    ```
 
 2. **SSO ログイン**
+
    ```bash
    # 基本的なログイン
    aws sso login --sso-session your-session-name
-   
+
    # ブラウザが利用できない環境の場合
    aws sso login --sso-session your-session-name --use-device-code
    ```
@@ -82,13 +87,13 @@ brew install bash
 
 ### 共通ライブラリ
 
-- **`common.sh`** - ESCシーケンス定義、カラー定義、ログ関数、スピナー表示、共通ユーティリティ関数
+- **`common.sh`** - ESC シーケンス定義、カラー定義、ログ関数、スピナー表示、共通ユーティリティ関数
 
 ### テスト環境
 
 - **`test/`** - 開発・デバッグ用テストスクリプト群
   - `test_spinner.sh` - スピナー関数のテスト
-  - `test_common.sh` - 共通関数のテスト  
+  - `test_common.sh` - 共通関数のテスト
   - `test_colors.sh` - カラー表示のテスト
   - `run_all_tests.sh` - 全テスト実行スクリプト
 
@@ -140,17 +145,20 @@ brew install bash
 ```
 
 #### オプション
+
 - `--help`, `-h`: 詳細なヘルプメッセージを表示
 - `--force`, `-f`: デフォルト値で自動実行（対話なし）
 
-#### デフォルト設定（--forceモード）
+#### デフォルト設定（--force モード）
+
 - **プレフィックス**: `autogen`
 - **処理アカウント数**: 利用可能な全アカウント
-- **リージョン**: SSO設定から取得
-- **正規化方式**: `minimal`（スペース→アンダースコアのみ）
+- **リージョン**: SSO 設定から取得
+- **正規化方式**: `minimal`（スペース → アンダースコアのみ）
 - **重複処理**: 自動上書き
 
 生成されるプロファイル形式：
+
 ```ini
 # AWS_SSO_CONFIG_GENERATOR START 2024/12/10 15:30:45
 
@@ -160,7 +168,7 @@ sso_account_id = 123456789012
 sso_role_name = PowerUserAccess
 region = ap-northeast-1
 output = json
-cli_pager = 
+cli_pager =
 
 # AWS_SSO_CONFIG_GENERATOR END 2024/12/10 15:30:45
 ```
@@ -176,7 +184,7 @@ cli_pager =
 
 ### リージョン設定の必要性
 
-AWS SSO関連のコマンド（`aws sso list-accounts`、`aws sso list-account-roles`等）を実行するには、**リージョン設定が必須**です。
+AWS SSO 関連のコマンド（`aws sso list-accounts`、`aws sso list-account-roles`等）を実行するには、**リージョン設定が必須**です。
 
 #### 設定方法
 
@@ -212,6 +220,7 @@ aws configure get region
 - **full**: 小文字変換 + ハイフン → アンダースコア + スペース → アンダースコア
 
 正規化例：
+
 ```
 元の名前: 'My Perfect-Web-Service Prod'
 minimal:  'My_Perfect-Web-Service_Prod'  (デフォルト)
@@ -235,6 +244,7 @@ full:     'my_perfect_web_service_prod'
 ### プロファイル品質チェック
 
 #### 重複プロファイル検出
+
 - **自動検出** - 分析時に重複プロファイルを自動チェック
 - **詳細分析** - 重複箇所の行番号と設定内容を表示
 - **解決ガイダンス** - 重複解消の推奨事項を提示
@@ -245,6 +255,7 @@ full:     'my_perfect_web_service_prod'
 ```
 
 #### 表示例
+
 ```
 ⚠️  重複プロファイル検出:
   重複プロファイル数: 1 個
@@ -289,7 +300,7 @@ sso_account_id = 123456789012
 sso_role_name = AdministratorAccess
 region = ap-northeast-1
 output = json
-cli_pager = 
+cli_pager =
 ```
 
 ## トラブルシューティング
@@ -297,6 +308,7 @@ cli_pager =
 ### よくある問題
 
 1. **リージョンが設定されていない**
+
    ```bash
    # エラー: Region not specified
    aws configure set region ap-northeast-1
@@ -305,24 +317,27 @@ cli_pager =
    ```
 
 2. **SSO セッションが期限切れ**
+
    ```bash
    # 基本的なログイン
    aws sso login --sso-session your-session-name
-   
+
    # ブラウザが利用できない環境の場合
    aws sso login --sso-session your-session-name --use-device-code
    ```
 
 3. **jq コマンドが見つからない**
+
    ```bash
    brew install jq
    ```
 
 4. **重複プロファイルが検出される**
+
    ```bash
    # 重複プロファイルの詳細確認
    ./check-sso-profiles.sh duplicates
-   
+
    # 設定ファイルを手動で編集して重複を削除
    # または自動生成プロファイルの場合は再生成
    ./cleanup-generated-profiles.sh
@@ -498,7 +513,7 @@ aws_profile_with_preview() {
   - `--help`/`-h` オプション追加（詳細なヘルプ表示）
   - `--force`/`-f` オプション追加（デフォルト値で自動実行）
   - デフォルト処理アカウント数を全アカウントに変更
-  - 自動化・CI/CD対応の強化
+  - 自動化・CI/CD 対応の強化
 - **v1.9.1** - プログレス表示形式の改善
 - **v1.9** - プログレス表示機能と複数ブロック対応
   - プロファイル生成時のプログレス表示機能追加
@@ -506,8 +521,8 @@ aws_profile_with_preview() {
   - 複数自動生成ブロック対応（分析機能修正）
   - ユーザー体験の大幅改善
 - **v1.8** - コード品質向上とテスト環境整備
-  - shellcheck完全対応（全警告解決）
-  - スピナー関数の改良（Unicodeスピナー、ESCシーケンス統一）
+  - shellcheck 完全対応（全警告解決）
+  - スピナー関数の改良（Unicode スピナー、ESC シーケンス統一）
   - テストディレクトリ作成（test/）
   - 開発・デバッグ用テストスクリプト追加
 - **v1.7** - プロファイル品質チェック機能追加

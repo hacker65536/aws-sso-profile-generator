@@ -1,0 +1,20 @@
+# コミットメッセージファイル
+commit-message*.txt
+
+# 一時ファイル
+*.tmp
+*.temp
+
+# バックアップファイル
+*.bak
+*~
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# ログファイル
+*.log
