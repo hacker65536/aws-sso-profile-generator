@@ -76,7 +76,7 @@ brew install bash
 - **`check-tools.sh`** - 必要ツールの存在・バージョン確認
 - **`check-aws-config.sh`** - AWS 設定ファイルとリージョン設定の確認
 - **`check-sso-config.sh`** - SSO 設定とセッション状態の確認
-- **`check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示
+- **`check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示・重複チェック
 - **`generate-sso-profiles.sh`** - SSO プロファイルの自動一括生成
 - **`cleanup-generated-profiles.sh`** - 自動生成プロファイルの削除
 
@@ -102,7 +102,7 @@ brew install bash
 ### 2. プロファイル分析
 
 ```bash
-# 全プロファイルの分析
+# 全プロファイルの分析（重複チェック含む）
 ./check-sso-profiles.sh
 
 # 自動生成プロファイルの詳細表示
@@ -110,6 +110,9 @@ brew install bash
 
 # 手動管理プロファイルの詳細表示
 ./check-sso-profiles.sh manual
+
+# 重複プロファイルの詳細チェック
+./check-sso-profiles.sh duplicates
 
 # 全件表示（最大300件）
 ./check-sso-profiles.sh auto --all
@@ -204,6 +207,36 @@ full:     'my_perfect_web_service_prod'
 ./check-sso-config.sh session-name
 ```
 
+### プロファイル品質チェック
+
+#### 重複プロファイル検出
+- **自動検出** - 分析時に重複プロファイルを自動チェック
+- **詳細分析** - 重複箇所の行番号と設定内容を表示
+- **解決ガイダンス** - 重複解消の推奨事項を提示
+
+```bash
+# 重複プロファイルの詳細チェック
+./check-sso-profiles.sh duplicates
+```
+
+#### 表示例
+```
+⚠️  重複プロファイル検出:
+  重複プロファイル数: 1 個
+  重複しているプロファイル名:
+    - test-profile-1 (2回定義)
+
+🔍 プロファイル名: test-profile-1
+  定義 1: 行 1
+    [profile test-profile-1]
+    sso_session = session1
+    ...
+  定義 2: 行 13
+    [profile test-profile-1]
+    sso_session = session2
+    ...
+```
+
 ### セキュリティ機能
 
 - アクセストークンは表示せず存在確認のみ
@@ -260,7 +293,18 @@ cli_pager =
    brew install jq
    ```
 
-4. **AWS CLI v1 が検出される**
+4. **重複プロファイルが検出される**
+   ```bash
+   # 重複プロファイルの詳細確認
+   ./check-sso-profiles.sh duplicates
+   
+   # 設定ファイルを手動で編集して重複を削除
+   # または自動生成プロファイルの場合は再生成
+   ./cleanup-generated-profiles.sh
+   ./generate-sso-profiles.sh
+   ```
+
+5. **AWS CLI v1 が検出される**
    ```bash
    # AWS CLI v2 をインストールしてください
    brew install awscli
