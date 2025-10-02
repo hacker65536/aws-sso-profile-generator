@@ -20,7 +20,7 @@ get_accounts_data() {
     
     local accounts_json
     local aws_error
-    if accounts_json=$(AWS_PROFILE="" aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>&1); then
+    if accounts_json=$(unset AWS_PROFILE; aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>&1); then
         if echo "$accounts_json" | jq -e '.accountList' >/dev/null 2>&1; then
             echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
             return 0
@@ -59,7 +59,7 @@ get_account_roles_data() {
     fi
     
     local roles_json
-    if roles_json=$(AWS_PROFILE="" aws sso list-account-roles --access-token "$ACCESS_TOKEN" --account-id "$account_id" --output json 2>/dev/null); then
+    if roles_json=$(unset AWS_PROFILE; aws sso list-account-roles --access-token "$ACCESS_TOKEN" --account-id "$account_id" --output json 2>/dev/null); then
         if echo "$roles_json" | jq -e '.roleList' >/dev/null 2>&1; then
             echo "$roles_json" | jq -r '.roleList[] | "\(.roleName)"'
             return 0

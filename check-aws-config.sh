@@ -26,14 +26,14 @@ check_region_config() {
     echo "⚙️  AWS CLI設定によるリージョン:"
     if command -v aws &> /dev/null; then
         local cli_region
-        cli_region=$(aws configure get region 2>/dev/null || echo "未設定")
+        cli_region=$(unset AWS_PROFILE; aws configure get region 2>/dev/null || echo "未設定")
         echo "  aws configure get region: $cli_region"
         
         # 3. aws configure list での確認
         echo
         echo "📋 AWS CLI 設定一覧:"
         local config_output
-        if config_output=$(aws configure list 2>/dev/null); then
+        if config_output=$(unset AWS_PROFILE; aws configure list 2>/dev/null); then
             echo "$config_output" | while IFS= read -r line; do
                 echo "  $line"
             done
@@ -115,7 +115,7 @@ check_aws_cli_config() {
     # aws configure list の実行
     if command -v aws &> /dev/null; then
         local config_output
-        if config_output=$(aws configure list 2>/dev/null); then
+        if config_output=$(unset AWS_PROFILE; aws configure list 2>/dev/null); then
             log_success "AWS CLI 設定情報を取得しました"
             echo
             echo "📋 AWS CLI 設定概要:"
