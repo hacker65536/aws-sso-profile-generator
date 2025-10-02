@@ -62,7 +62,7 @@ region = ap-northeast-1
 # SSO セッション設定セクション
 [sso-session my-session]
 sso_region = ap-northeast-1
-sso_start_url = https://your-domain.awsapps.com/start/
+sso_start_url = https://mycompany.awsapps.com/start/
 sso_registration_scopes = sso:account:access
 ```
 
@@ -78,10 +78,10 @@ sso_registration_scopes = sso:account:access
 
    ```bash
    # 基本的なログイン
-   aws sso login --sso-session your-session-name
+   aws sso login --sso-session my-session
 
    # ブラウザが利用できない環境の場合
-   aws sso login --sso-session your-session-name --use-device-code
+   aws sso login --sso-session my-session --use-device-code
    ```
 
 3. **プロファイル自動生成**
@@ -257,7 +257,7 @@ full:     'my_perfect_web_service_prod'
 ./check-sso-config.sh
 
 # 特定セッション確認
-./check-sso-config.sh session-name
+./check-sso-config.sh my-session
 ```
 
 ### プロファイル品質チェック
@@ -311,7 +311,7 @@ region = ap-northeast-1
 # SSO Session 設定
 [sso-session my-session]
 sso_region = ap-northeast-1
-sso_start_url = https://your-domain.awsapps.com/start/
+sso_start_url = https://mycompany.awsapps.com/start/
 sso_registration_scopes = sso:account:access
 ```
 
@@ -344,10 +344,10 @@ cli_pager =
 
    ```bash
    # 基本的なログイン
-   aws sso login --sso-session your-session-name
+   aws sso login --sso-session my-session
 
    # ブラウザが利用できない環境の場合
-   aws sso login --sso-session your-session-name --use-device-code
+   aws sso login --sso-session my-session --use-device-code
    ```
 
 3. **jq コマンドが見つからない**

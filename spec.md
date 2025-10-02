@@ -188,7 +188,7 @@ sso_registration_scopes = sso:account:access
 ./check-sso-config.sh
 
 # 特定のセッションを確認
-./check-sso-config.sh session-name
+./check-sso-config.sh my-session
 
 # ヘルプ表示
 ./check-sso-config.sh --help
@@ -841,7 +841,7 @@ done
 
 # SSO設定確認
 ./check-sso-config.sh                    # 全セッション表示、最初のセッション使用
-./check-sso-config.sh session-name       # 特定セッション確認
+./check-sso-config.sh my-session         # 特定セッション確認
 ./check-sso-config.sh --help             # ヘルプ表示
 
 # プロファイル分析
