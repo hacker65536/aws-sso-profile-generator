@@ -58,6 +58,15 @@ get_current_timezone() {
     date '+%Z %z'
 }
 
+# GNU dateコマンドの検出
+is_gnu_date() {
+    if date --version 2>/dev/null | grep -q "GNU"; then
+        return 0  # GNU date
+    else
+        return 1  # BSD date or other
+    fi
+}
+
 # UTC時刻をローカルタイムゾーンに変換
 convert_utc_to_local() {
     local utc_time="$1"
@@ -65,21 +74,29 @@ convert_utc_to_local() {
     local timezone_info
     timezone_info=$(get_current_timezone)
     
-    if command -v gdate &> /dev/null; then
-        # GNU date (Linux/gdate on macOS)
+    if is_gnu_date; then
+        # GNU date (Linux or GNU coreutils)
+        local_time=$(date -d "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
+        if [ -n "$local_time" ]; then
+            echo "$local_time $timezone_info"
+        else
+            echo "$utc_time (GNU date変換失敗)"
+        fi
+    elif command -v gdate &> /dev/null; then
+        # GNU date installed as gdate (common on macOS with Homebrew)
         local_time=$(gdate -d "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
         if [ -n "$local_time" ]; then
             echo "$local_time $timezone_info"
         else
-            echo "$utc_time (変換失敗)"
+            echo "$utc_time (gdate変換失敗)"
         fi
     elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" &>/dev/null; then
-        # BSD date (macOS default)
+        # BSD date (macOS default, FreeBSD)
         local_time=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
         if [ -n "$local_time" ]; then
             echo "$local_time $timezone_info"
         else
-            echo "$utc_time (変換失敗)"
+            echo "$utc_time (BSD date変換失敗)"
         fi
     else
         # フォールバック: 元の時刻にタイムゾーン情報を付加
@@ -543,10 +560,16 @@ get_access_token() {
         local current_timestamp
         local expires_timestamp
         
-        if command -v gdate &> /dev/null; then
+        if is_gnu_date; then
+            # GNU date (Linux or GNU coreutils)
+            current_timestamp=$(date +%s)
+            expires_timestamp=$(date -d "$expires_at" +%s 2>/dev/null || echo "0")
+        elif command -v gdate &> /dev/null; then
+            # GNU date installed as gdate (common on macOS with Homebrew)
             current_timestamp=$(gdate +%s)
             expires_timestamp=$(gdate -d "$expires_at" +%s 2>/dev/null || echo "0")
         elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" &>/dev/null; then
+            # BSD date (macOS default, FreeBSD)
             current_timestamp=$(date +%s)
             expires_timestamp=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" 2>/dev/null || echo "0")
         else
@@ -636,10 +659,16 @@ check_sso_session_status() {
         local current_timestamp
         local expires_timestamp
         
-        if command -v gdate &> /dev/null; then
+        if is_gnu_date; then
+            # GNU date (Linux or GNU coreutils)
+            current_timestamp=$(date +%s)
+            expires_timestamp=$(date -d "$expires_at" +%s 2>/dev/null || echo "0")
+        elif command -v gdate &> /dev/null; then
+            # GNU date installed as gdate (common on macOS with Homebrew)
             current_timestamp=$(gdate +%s)
             expires_timestamp=$(gdate -d "$expires_at" +%s 2>/dev/null || echo "0")
         elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" &>/dev/null; then
+            # BSD date (macOS default, FreeBSD)
             current_timestamp=$(date +%s)
             expires_timestamp=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" 2>/dev/null || echo "0")
         else
