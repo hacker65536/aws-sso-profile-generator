@@ -88,6 +88,48 @@ safe_sed_range() {
     fi
 }
 
+# 重複プロファイルのチェック
+check_duplicate_profiles() {
+    local config_file="$1"
+    
+    # 全プロファイル名を取得
+    local all_profiles
+    all_profiles=$(grep "^\[profile " "$config_file" 2>/dev/null | sed 's/\[profile \(.*\)\]/\1/' | sort)
+    
+    if [ -z "$all_profiles" ]; then
+        return 0
+    fi
+    
+    # 重複をチェック
+    local duplicates
+    duplicates=$(echo "$all_profiles" | uniq -d)
+    
+    if [ -n "$duplicates" ]; then
+        echo
+        echo "⚠️  重複プロファイル検出:"
+        local duplicate_count
+        duplicate_count=$(echo "$duplicates" | wc -l | tr -d ' ')
+        echo "  重複プロファイル数: $duplicate_count 個"
+        echo
+        echo "  重複しているプロファイル名:"
+        echo "$duplicates" | while IFS= read -r profile; do
+            if [ -n "$profile" ]; then
+                # 重複回数を取得
+                local count
+                count=$(echo "$all_profiles" | grep -c "^$profile$")
+                echo "    - $profile (${count}回定義)"
+            fi
+        done
+        echo
+        log_warning "重複プロファイルが検出されました"
+        log_info "重複プロファイルは予期しない動作の原因となる可能性があります"
+        log_info "設定ファイルを確認して重複を解消することを推奨します"
+    else
+        echo
+        echo "✅ 重複プロファイルチェック: 重複なし"
+    fi
+}
+
 # プロファイル分析の実行
 analyze_profiles() {
     local config_file="$1"
@@ -135,6 +177,10 @@ analyze_profiles() {
     echo "  全プロファイル数: $total_profiles"
     echo "  自動生成プロファイル: $auto_generated_count"
     echo "  手動管理プロファイル: $manual_count"
+    
+    # 重複プロファイルのチェック
+    check_duplicate_profiles "$config_file"
+    
     echo
     
     # 詳細情報の表示
@@ -436,6 +482,96 @@ show_manual_profiles_details() {
     fi
 }
 
+# 重複プロファイルの詳細表示
+show_duplicate_details() {
+    local config_file="$1"
+    
+    log_info "重複プロファイルの詳細確認中..."
+    log_info "設定ファイル: $config_file"
+    echo
+    
+    # 設定ファイルの存在確認
+    if [ ! -f "$config_file" ]; then
+        log_warning "設定ファイルが見つかりません: $config_file"
+        return 1
+    fi
+    
+    # 全プロファイル名を取得（行番号付き）
+    local all_profiles_with_lines
+    all_profiles_with_lines=$(grep -n "^\[profile " "$config_file" 2>/dev/null)
+    
+    if [ -z "$all_profiles_with_lines" ]; then
+        log_info "プロファイルが見つかりませんでした"
+        return 0
+    fi
+    
+    # プロファイル名のみを取得してソート
+    local all_profiles
+    all_profiles=$(echo "$all_profiles_with_lines" | sed 's/^[0-9]*:\[profile \(.*\)\]/\1/' | sort)
+    
+    # 重複をチェック
+    local duplicates
+    duplicates=$(echo "$all_profiles" | uniq -d)
+    
+    if [ -n "$duplicates" ]; then
+        log_warning "重複プロファイルが検出されました"
+        echo
+        
+        local duplicate_count
+        duplicate_count=$(echo "$duplicates" | wc -l | tr -d ' ')
+        echo "📋 重複プロファイル詳細 ($duplicate_count 個):"
+        echo
+        
+        echo "$duplicates" | while IFS= read -r profile; do
+            if [ -n "$profile" ]; then
+                echo "🔍 プロファイル名: $profile"
+                
+                # 該当するプロファイルの行番号と詳細を表示
+                local profile_lines
+                profile_lines=$(echo "$all_profiles_with_lines" | grep "\[profile $profile\]")
+                
+                local count=1
+                echo "$profile_lines" | while IFS= read -r line; do
+                    local line_num
+                    line_num=$(echo "$line" | cut -d: -f1)
+                    echo "  定義 $count: 行 $line_num"
+                    
+                    # プロファイルの設定内容を表示（次のプロファイルまで）
+                    local next_profile_line
+                    next_profile_line=$(tail -n +$((line_num + 1)) "$config_file" | grep -n "^\[" | head -1 | cut -d: -f1)
+                    
+                    if [ -n "$next_profile_line" ]; then
+                        local end_line=$((line_num + next_profile_line - 1))
+                        sed -n "${line_num},${end_line}p" "$config_file" | head -10 | sed 's/^/    /'
+                    else
+                        tail -n +$line_num "$config_file" | head -10 | sed 's/^/    /'
+                    fi
+                    
+                    count=$((count + 1))
+                    echo
+                done
+                echo "  ---"
+                echo
+            fi
+        done
+        
+        echo
+        log_info "重複解消の推奨事項:"
+        echo "  1. 設定ファイルを手動で編集して重複を削除"
+        echo "  2. 自動生成プロファイルの場合は再生成を検討"
+        echo "  3. バックアップを取ってから編集作業を実施"
+        
+        return 1
+    else
+        log_success "重複プロファイルは見つかりませんでした"
+        echo
+        local total_count
+        total_count=$(echo "$all_profiles" | wc -l | tr -d ' ')
+        echo "✅ 全 $total_count 個のプロファイルは一意です"
+        return 0
+    fi
+}
+
 # 使用方法を表示
 show_usage() {
     echo "使用方法: $0 [COMMAND] [OPTIONS]"
@@ -444,6 +580,7 @@ show_usage() {
     echo "  analyze               全プロファイルの分析（デフォルト）"
     echo "  auto [--all]          自動生成プロファイルの詳細表示"
     echo "  manual [--all]        手動管理プロファイルの詳細表示"
+    echo "  duplicates            重複プロファイルの詳細チェック"
     echo "  -h, --help            このヘルプを表示"
     echo
     echo "オプション:"
@@ -456,6 +593,7 @@ show_usage() {
     echo "  $0 auto --all         # 自動生成プロファイルの詳細を全件表示"
     echo "  $0 manual             # 手動管理プロファイルの詳細を表示（最初の10件）"
     echo "  $0 manual --all       # 手動管理プロファイルの詳細を全件表示"
+    echo "  $0 duplicates         # 重複プロファイルの詳細チェック"
 }
 
 # メイン実行
@@ -492,6 +630,10 @@ main() {
             ;;
         "manual")
             show_manual_profiles_details "$config_file" "$show_all"
+            result=$?
+            ;;
+        "duplicates")
+            show_duplicate_details "$config_file"
             result=$?
             ;;
         *)
