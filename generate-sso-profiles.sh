@@ -45,7 +45,7 @@ list_accounts() {
         return 0
     else
         log_error "アカウント一覧の取得に失敗しました"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command
         return 1
     fi
 }
@@ -296,8 +296,7 @@ main() {
     if ! get_access_token "$SSO_START_URL"; then
         echo
         log_error "SSO セッションが無効です。プロファイル生成を続行できません。"
-        log_info "以下のコマンドでSSO ログインを実行してください:"
-        echo "  aws sso login --sso-session $SSO_SESSION_NAME"
+        show_sso_login_command "$SSO_SESSION_NAME"
         echo
         log_info "ログイン後、再度このスクリプトを実行してください。"
         exit 1

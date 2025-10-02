@@ -167,7 +167,7 @@ check_sso_config() {
         
         # SSO セッション状態もチェック
         echo
-        check_sso_session_status "$SSO_START_URL"
+        check_sso_session_status "$SSO_START_URL" "$SSO_SESSION_NAME"
         
         return 0
     else
@@ -213,7 +213,7 @@ check_specific_sso_session() {
         
         # SSO セッション状態もチェック
         echo
-        check_sso_session_status "$SSO_START_URL"
+        check_sso_session_status "$SSO_START_URL" "$SSO_SESSION_NAME"
         
         return 0
     else

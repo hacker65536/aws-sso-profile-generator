@@ -512,7 +512,7 @@ get_access_token() {
     # SSO キャッシュディレクトリの存在確認
     if [ ! -d "$sso_cache_dir" ]; then
         log_error "SSO キャッシュディレクトリが見つかりません: $sso_cache_dir"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -522,7 +522,7 @@ get_access_token() {
     
     if [ -z "$cache_files" ]; then
         log_error "SSO セッションキャッシュが見つかりません"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -543,7 +543,7 @@ get_access_token() {
     
     if [ -z "$access_token" ]; then
         log_error "アクセストークンが見つかりません"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -583,7 +583,7 @@ get_access_token() {
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
             echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"
-            log_info "aws sso login を実行してください"
+            show_sso_login_command "$session_name"
             return 1
         else
             log_success "有効なアクセストークンを取得しました"
@@ -597,9 +597,29 @@ get_access_token() {
     return 0
 }
 
+# SSO ログインコマンドの表示
+show_sso_login_command() {
+    local session_name="$1"
+    
+    if [ -n "$session_name" ]; then
+        log_info "以下のコマンドでSSO ログインを実行してください:"
+        echo "  aws sso login --sso-session $session_name"
+        echo
+        log_info "ブラウザが利用できない環境の場合:"
+        echo "  aws sso login --sso-session $session_name --use-device-code"
+    else
+        log_info "以下のコマンドでSSO ログインを実行してください:"
+        echo "  aws sso login --sso-session <session-name>"
+        echo
+        log_info "ブラウザが利用できない環境の場合:"
+        echo "  aws sso login --sso-session <session-name> --use-device-code"
+    fi
+}
+
 # SSO セッション状態チェック
 check_sso_session_status() {
     local sso_start_url="$1"
+    local session_name="$2"
     
     if [ -z "$sso_start_url" ]; then
         log_error "SSO Start URLが指定されていません"
@@ -613,7 +633,7 @@ check_sso_session_status() {
     # SSO キャッシュディレクトリの存在確認
     if [ ! -d "$sso_cache_dir" ]; then
         log_warning "SSO キャッシュディレクトリが見つかりません: $sso_cache_dir"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -623,7 +643,7 @@ check_sso_session_status() {
     
     if [ -z "$cache_files" ]; then
         log_warning "SSO セッションキャッシュが見つかりません"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -646,7 +666,7 @@ check_sso_session_status() {
     
     if [ -z "$access_token" ]; then
         log_warning "アクセストークンが見つかりません"
-        log_info "aws sso login を実行してください"
+        show_sso_login_command "$session_name"
         return 1
     fi
     
@@ -680,7 +700,7 @@ check_sso_session_status() {
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
             echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"
-            log_info "aws sso login を実行してください"
+            show_sso_login_command "$session_name"
             return 1
         else
             log_success "SSO セッションが有効です"

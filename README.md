@@ -53,7 +53,11 @@ brew install bash
 
 2. **SSO ログイン**
    ```bash
-   aws sso login --profile your-profile
+   # 基本的なログイン
+   aws sso login --sso-session your-session-name
+   
+   # ブラウザが利用できない環境の場合
+   aws sso login --sso-session your-session-name --use-device-code
    ```
 
 3. **プロファイル自動生成**
@@ -244,7 +248,11 @@ cli_pager =
 
 2. **SSO セッションが期限切れ**
    ```bash
-   aws sso login --profile your-profile
+   # 基本的なログイン
+   aws sso login --sso-session your-session-name
+   
+   # ブラウザが利用できない環境の場合
+   aws sso login --sso-session your-session-name --use-device-code
    ```
 
 3. **jq コマンドが見つからない**
