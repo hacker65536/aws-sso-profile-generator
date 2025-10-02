@@ -47,12 +47,16 @@ echo "プログレス表示のデモンストレーション:"
 # カーソルを非表示にする
 printf "%s" "$HIDE_CURSOR"
 
-for i in {1..10}; do
-    show_progress_with_counter "$i" "10" "アイテム処理中"
-    sleep 0.3
+# 異なる長さのアカウント名でテスト
+account_names=("Account-A" "Very-Long-Account-Name-Example" "Short" "Medium-Length-Account" "X")
+
+for i in {1..5}; do
+    account_name=${account_names[$((i-1))]}
+    show_progress_with_counter "$i" "5" "処理中: $account_name"
+    sleep 0.5
 done
 
-show_progress_complete "10" "処理完了"
+show_progress_complete "5" "全アカウント処理完了"
 echo "✅ テスト5完了"
 echo
 

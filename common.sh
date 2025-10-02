@@ -439,13 +439,13 @@ show_progress_with_counter() {
     done
     
     printf "%s" "$ERASE_LINE"
-    printf "%s %s [%s] %d/%d (%d%%)" \
+    printf "%s [%s] %d/%d (%d%%) %s" \
         "${GREEN}${spin:i++%n:1}${RESET}" \
-        "$message" \
         "$progress_bar" \
         "$current" \
         "$total" \
-        "$percentage"
+        "$percentage" \
+        "$message"
     printf "%s\r" "$HIDE_CURSOR"
 }
 
@@ -455,11 +455,11 @@ show_progress_complete() {
     local message="${2:-完了}"
     
     printf "%s" "$ERASE_LINE"
-    printf "%s %s [████████████████████] %d/%d (100%%)\n" \
+    printf "%s [████████████████████] %d/%d (100%%) %s\n" \
         "${GREEN}✅${RESET}" \
-        "$message" \
         "$total" \
-        "$total"
+        "$total" \
+        "$message"
     printf "%s" "$SHOW_CURSOR"
 }
 # SSO設定情報の取得
