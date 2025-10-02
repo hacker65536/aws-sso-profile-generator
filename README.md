@@ -399,6 +399,91 @@ if get_sso_config "$config_file"; then
 fi
 ```
 
+## 便利な組み合わせ
+
+### fzf との組み合わせ
+
+このツールで生成したプロファイルは、[fzf](https://github.com/junegunn/fzf)（fuzzy finder）と組み合わせることで、より便利に使用できます。
+
+#### プロファイル選択の簡単化
+
+```bash
+# fzfを使ったプロファイル選択
+export AWS_PROFILE=$(aws configure list-profiles | grep -v "^$" | fzf --prompt="AWS Profile > ")
+
+# 自動生成プロファイルのみを選択
+export AWS_PROFILE=$(aws configure list-profiles | grep "^autogen-" | fzf --prompt="Auto-generated Profile > ")
+
+# 特定のアカウントのプロファイルを選択
+export AWS_PROFILE=$(aws configure list-profiles | grep "123456789012" | fzf --prompt="Account 123456789012 > ")
+```
+
+#### シェル関数として登録
+
+```bash
+# ~/.bashrc または ~/.zshrc に追加
+aws_profile() {
+    local profile
+    profile=$(aws configure list-profiles | grep -v "^$" | fzf --prompt="AWS Profile > ")
+    if [ -n "$profile" ]; then
+        export AWS_PROFILE="$profile"
+        echo "✅ AWS_PROFILE set to: $profile"
+    fi
+}
+
+# 自動生成プロファイル専用の関数
+aws_autogen_profile() {
+    local profile
+    profile=$(aws configure list-profiles | grep "^autogen-" | fzf --prompt="Auto-generated Profile > ")
+    if [ -n "$profile" ]; then
+        export AWS_PROFILE="$profile"
+        echo "✅ AWS_PROFILE set to: $profile"
+    fi
+}
+```
+
+#### 使用例
+
+```bash
+# プロファイル選択
+aws_profile
+
+# 選択されたプロファイルで AWS コマンド実行
+aws sts get-caller-identity
+aws s3 ls
+```
+
+#### fzf のインストール
+
+```bash
+# macOS (Homebrew)
+brew install fzf
+
+# Ubuntu/Debian
+sudo apt install fzf
+
+# その他の環境
+# https://github.com/junegunn/fzf#installation を参照
+```
+
+#### 高度な使用例
+
+```bash
+# プレビュー機能付きプロファイル選択
+aws_profile_with_preview() {
+    local profile
+    profile=$(aws configure list-profiles | grep -v "^$" | fzf \
+        --prompt="AWS Profile > " \
+        --preview="aws configure get region --profile {} 2>/dev/null || echo 'No region configured'" \
+        --preview-window=right:30%)
+    if [ -n "$profile" ]; then
+        export AWS_PROFILE="$profile"
+        echo "✅ AWS_PROFILE set to: $profile"
+        echo "📍 Region: $(aws configure get region --profile "$profile" 2>/dev/null || echo 'Not configured')"
+    fi
+}
+```
+
 ## ライセンス
 
 このプロジェクトは MIT ライセンスの下で公開されています。
