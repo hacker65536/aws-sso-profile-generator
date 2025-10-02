@@ -49,6 +49,25 @@ brew install bash
 
 ## クイックスタート
 
+### 前提条件
+
+プロファイル自動生成を実行する前に、`~/.aws/config` ファイル（または `AWS_CONFIG_FILE` 環境変数で指定したファイル）に以下の設定が必要です：
+
+```ini
+# AWS SSO の API を実行するために IAM Identity Center の region の明記
+# 設定がなければ AWS_REGION の環境変数で設定しても可
+[default]
+region = ap-northeast-1
+
+# SSO セッション設定セクション
+[sso-session my-session]
+sso_region = ap-northeast-1
+sso_start_url = https://your-domain.awsapps.com/start/
+sso_registration_scopes = sso:account:access
+```
+
+### 実行手順
+
 1. **環境チェックの実行**
 
    ```bash
@@ -282,9 +301,14 @@ full:     'my_perfect_web_service_prod'
 
 ## 設定例
 
-### SSO Session 設定
+### 完全な AWS 設定ファイル例
 
 ```ini
+# デフォルトリージョン設定（AWS SSO API 実行に必須）
+[default]
+region = ap-northeast-1
+
+# SSO Session 設定
 [sso-session my-session]
 sso_region = ap-northeast-1
 sso_start_url = https://your-domain.awsapps.com/start/
