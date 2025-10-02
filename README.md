@@ -70,7 +70,7 @@ brew install bash
 ### 個別機能スクリプト
 
 - **`check-tools.sh`** - 必要ツールの存在・バージョン確認
-- **`check-aws-config.sh`** - AWS 設定ファイルの確認とサマリー表示
+- **`check-aws-config.sh`** - AWS 設定ファイルとリージョン設定の確認
 - **`check-awssso-config.sh`** - SSO 設定とセッション状態の確認
 - **`check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示
 - **`generate-sso-profiles.sh`** - SSO プロファイルの自動一括生成
@@ -88,7 +88,7 @@ brew install bash
 # 必要ツールの確認
 ./check-tools.sh
 
-# AWS設定ファイルの確認
+# AWS設定ファイルとリージョン設定の確認
 ./check-aws-config.sh
 
 # SSO設定の確認
@@ -138,6 +138,32 @@ cli_pager =
 ```bash
 # 自動生成プロファイルの削除
 ./cleanup-generated-profiles.sh
+```
+
+## 重要な前提条件
+
+### リージョン設定の必要性
+
+AWS SSO関連のコマンド（`aws sso list-accounts`、`aws sso list-account-roles`等）を実行するには、**リージョン設定が必須**です。
+
+#### 設定方法
+
+```bash
+# 環境変数による設定
+export AWS_REGION=ap-northeast-1
+
+# AWS CLI設定による設定
+aws configure set region ap-northeast-1
+```
+
+#### 確認方法
+
+```bash
+# リージョン設定の詳細確認
+./check-aws-config.sh
+
+# 現在の設定確認
+aws configure get region
 ```
 
 ## 機能詳細
@@ -208,17 +234,25 @@ cli_pager =
 
 ### よくある問題
 
-1. **SSO セッションが期限切れ**
+1. **リージョンが設定されていない**
+   ```bash
+   # エラー: Region not specified
+   aws configure set region ap-northeast-1
+   # または
+   export AWS_REGION=ap-northeast-1
+   ```
+
+2. **SSO セッションが期限切れ**
    ```bash
    aws sso login --profile your-profile
    ```
 
-2. **jq コマンドが見つからない**
+3. **jq コマンドが見つからない**
    ```bash
    brew install jq
    ```
 
-3. **AWS CLI v1 が検出される**
+4. **AWS CLI v1 が検出される**
    ```bash
    # AWS CLI v2 をインストールしてください
    brew install awscli
