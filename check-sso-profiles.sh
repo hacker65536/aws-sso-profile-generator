@@ -144,16 +144,42 @@ analyze_profiles() {
         return 1
     fi
     
-    # 自動生成プロファイルの検出
+    # 自動生成プロファイルの検出（複数ブロック対応）
     local auto_generated_count=0
-    local auto_start_line=""
-    local auto_end_line=""
     
-    auto_start_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
-    auto_end_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
+    # 全ての自動生成ブロックを検出
+    local start_lines
+    local end_lines
+    start_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1)
+    end_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1)
     
-    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ] && [ "$auto_start_line" != "" ] && [ "$auto_end_line" != "" ]; then
-        auto_generated_count=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")")
+    if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+        # 各ブロックのプロファイル数を合計
+        local start_array
+        local end_array
+        mapfile -t start_array <<< "$start_lines"
+        mapfile -t end_array <<< "$end_lines"
+        
+        # ブロック数の確認
+        local start_count=${#start_array[@]}
+        local end_count=${#end_array[@]}
+        
+        if [ "$start_count" -eq "$end_count" ]; then
+            # 各ブロックを処理
+            for ((i=0; i<start_count; i++)); do
+                local block_start=${start_array[i]}
+                local block_end=${end_array[i]}
+                
+                if [ -n "$block_start" ] && [ -n "$block_end" ] && [ "$block_start" -lt "$block_end" ]; then
+                    local block_profiles
+                    block_profiles=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$block_start" "$block_end" "$config_file")")
+                    block_profiles=$(safe_number "$block_profiles")
+                    auto_generated_count=$((auto_generated_count + block_profiles))
+                fi
+            done
+        else
+            log_debug "自動生成マーカーの数が不一致: START=$start_count, END=$end_count"
+        fi
     fi
     
     # auto_generated_countが空文字列の場合は0に設定
@@ -186,24 +212,51 @@ analyze_profiles() {
     # 詳細情報の表示
     if [ "${auto_generated_count:-0}" -gt 0 ]; then
         echo "🤖 自動生成プロファイル詳細:"
-        local auto_section
-        auto_section=$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")
         
-        # 生成日時の取得
-        local generation_time
-        generation_time=$(echo "$auto_section" | head -1 | sed 's/.*START \(.*\)/\1/')
-        echo "  生成日時: $generation_time"
-        
-        # 最初の5個のプロファイル名を表示
-        local profile_names
-        profile_names=$(echo "$auto_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' | head -5)
-        echo "  プロファイル例（最初の5個）:"
-        echo "$profile_names" | while IFS= read -r profile; do
-            [ -n "$profile" ] && echo "    - $profile"
-        done
-        
-        if [ "${auto_generated_count:-0}" -gt 5 ]; then
-            echo "    ... 他 $((auto_generated_count - 5)) 個"
+        # 複数ブロック対応の詳細表示
+        if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+            local start_array
+            local end_array
+            mapfile -t start_array <<< "$start_lines"
+            mapfile -t end_array <<< "$end_lines"
+            local start_count=${#start_array[@]}
+            
+            if [ "$start_count" -gt 0 ]; then
+                # 最新の生成日時を取得（最後のブロック）
+                local latest_start=${start_array[$((start_count-1))]}
+                local latest_end=${end_array[$((start_count-1))]}
+                local latest_section
+                latest_section=$(safe_sed_range "$latest_start" "$latest_end" "$config_file")
+                
+                local generation_time
+                generation_time=$(echo "$latest_section" | head -1 | sed 's/.*START \(.*\)/\1/')
+                echo "  生成日時: $generation_time"
+                
+                # 全ブロックからプロファイル名を取得（最初の5個）
+                local all_profile_names=""
+                for ((i=0; i<start_count; i++)); do
+                    local block_start=${start_array[i]}
+                    local block_end=${end_array[i]}
+                    local block_section
+                    block_section=$(safe_sed_range "$block_start" "$block_end" "$config_file")
+                    local block_profile_names
+                    block_profile_names=$(echo "$block_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/')
+                    if [ -n "$all_profile_names" ]; then
+                        all_profile_names="$all_profile_names"$'\n'"$block_profile_names"
+                    else
+                        all_profile_names="$block_profile_names"
+                    fi
+                done
+                
+                echo "  プロファイル例（最初の5個）:"
+                echo "$all_profile_names" | head -5 | while IFS= read -r profile; do
+                    [ -n "$profile" ] && echo "    - $profile"
+                done
+                
+                if [ "${auto_generated_count:-0}" -gt 5 ]; then
+                    echo "    ... 他 $((auto_generated_count - 5)) 個"
+                fi
+            fi
         fi
         echo
     fi
@@ -271,30 +324,62 @@ show_auto_generated_details() {
         return 1
     fi
     
-    # 自動生成セクションの検索
-    local auto_start_line
-    local auto_end_line
+    # 自動生成セクションの検索（複数ブロック対応）
+    local start_lines
+    local end_lines
+    start_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1)
+    end_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1)
     
-    auto_start_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" | cut -d: -f1)
-    auto_end_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" | cut -d: -f1)
-    
-    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-        local auto_section
-        auto_section=$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")
+    if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+        local start_array
+        local end_array
+        mapfile -t start_array <<< "$start_lines"
+        mapfile -t end_array <<< "$end_lines"
+        local start_count=${#start_array[@]}
+        local end_count=${#end_array[@]}
         
-        log_success "自動生成プロファイルが見つかりました"
-        echo
+        local start_array
+        local end_array
+        mapfile -t start_array <<< "$start_lines"
+        mapfile -t end_array <<< "$end_lines"
+        local start_count=${#start_array[@]}
+        local end_count=${#end_array[@]}
         
-        # 生成情報の表示
-        local generation_time
-        generation_time=$(echo "$auto_section" | head -1 | sed 's/.*START \(.*\)/\1/')
-        echo "📋 自動生成情報:"
-        echo "  生成日時: $generation_time"
-        
-        # プロファイル数のカウント
-        local profile_count
-        profile_count=$(safe_pipe_grep_count "^\[profile " "$auto_section")
-        echo "  プロファイル数: $profile_count 個"
+        if [ "$start_count" -eq "$end_count" ] && [ "$start_count" -gt 0 ]; then
+            log_success "自動生成プロファイルが見つかりました"
+            echo
+            
+            # 最新の生成情報を表示（最後のブロック）
+            local latest_start=${start_array[$((start_count-1))]}
+            local latest_end=${end_array[$((end_count-1))]}
+            local latest_section
+            latest_section=$(safe_sed_range "$latest_start" "$latest_end" "$config_file")
+            
+            local generation_time
+            generation_time=$(echo "$latest_section" | head -1 | sed 's/.*START \(.*\)/\1/')
+            echo "📋 自動生成情報:"
+            echo "  最新生成日時: $generation_time"
+            echo "  生成ブロック数: $start_count 個"
+            
+            # 全ブロックのプロファイル数を合計
+            local total_profile_count=0
+            for ((i=0; i<start_count; i++)); do
+                local block_start=${start_array[i]}
+                local block_end=${end_array[i]}
+                local block_section
+                block_section=$(safe_sed_range "$block_start" "$block_end" "$config_file")
+                local block_profiles
+                block_profiles=$(safe_pipe_grep_count "^\[profile " "$block_section")
+                block_profiles=$(safe_number "$block_profiles")
+                total_profile_count=$((total_profile_count + block_profiles))
+            done
+            
+            echo "  総プロファイル数: $total_profile_count 個"
+            local profile_count=$total_profile_count
+        else
+            log_debug "自動生成マーカーの数が不一致: START=$start_count, END=$end_count"
+            return 1
+        fi
         echo
         
         # プロファイル名の表示
@@ -318,10 +403,24 @@ show_auto_generated_details() {
             fi
         fi
         
-        local profile_names
-        profile_names=$(echo "$auto_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' | head -$display_limit)
+        # 全ブロックからプロファイル名を取得
+        local all_profile_names=""
+        for ((i=0; i<start_count; i++)); do
+            local block_start=${start_array[i]}
+            local block_end=${end_array[i]}
+            local block_section
+            block_section=$(safe_sed_range "$block_start" "$block_end" "$config_file")
+            local block_profile_names
+            block_profile_names=$(echo "$block_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/')
+            if [ -n "$all_profile_names" ]; then
+                all_profile_names="$all_profile_names"$'\n'"$block_profile_names"
+            else
+                all_profile_names="$block_profile_names"
+            fi
+        done
         
-        echo "$profile_names" | while IFS= read -r profile; do
+        # 表示制限を適用
+        echo "$all_profile_names" | head -$display_limit | while IFS= read -r profile; do
             [ -n "$profile" ] && echo "  - $profile"
         done
         
@@ -359,21 +458,38 @@ show_manual_profiles_details() {
         return 1
     fi
     
-    # 自動生成プロファイルの範囲を取得
-    local auto_start_line
-    local auto_end_line
-    
-    auto_start_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
-    auto_end_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
+    # 自動生成プロファイルの範囲を取得（複数ブロック対応）
+    local start_lines
+    local end_lines
+    start_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1)
+    end_lines=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1)
     
     # 全プロファイル数の取得
     local total_profiles
     total_profiles=$(safe_grep_count "^\[profile " "$config_file")
     
-    # 自動生成プロファイル数の取得
+    # 自動生成プロファイル数の取得（複数ブロック対応）
     local auto_generated_count=0
-    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ] && [ "$auto_start_line" != "" ] && [ "$auto_end_line" != "" ]; then
-        auto_generated_count=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")")
+    if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+        local start_array
+        local end_array
+        mapfile -t start_array <<< "$start_lines"
+        mapfile -t end_array <<< "$end_lines"
+        local start_count=${#start_array[@]}
+        local end_count=${#end_array[@]}
+        
+        if [ "$start_count" -eq "$end_count" ]; then
+            for ((i=0; i<start_count; i++)); do
+                local block_start=${start_array[i]}
+                local block_end=${end_array[i]}
+                if [ -n "$block_start" ] && [ -n "$block_end" ] && [ "$block_start" -lt "$block_end" ]; then
+                    local block_profiles
+                    block_profiles=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$block_start" "$block_end" "$config_file")")
+                    block_profiles=$(safe_number "$block_profiles")
+                    auto_generated_count=$((auto_generated_count + block_profiles))
+                fi
+            done
+        fi
     fi
     
     # 手動管理プロファイル数（自動生成以外の全て）
@@ -393,9 +509,21 @@ show_manual_profiles_details() {
         auto_profiles_file=$(mktemp)
         echo "PROFILE SESSION ACCOUNT ROLE REGION" > "$temp_file"
         
-        # 自動生成プロファイル名を一時ファイルに保存
-        if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-            safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
+        # 自動生成プロファイル名を一時ファイルに保存（複数ブロック対応）
+        if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+            local start_array
+            local end_array
+            mapfile -t start_array <<< "$start_lines"
+            mapfile -t end_array <<< "$end_lines"
+            local start_count=${#start_array[@]}
+            
+            for ((i=0; i<start_count; i++)); do
+                local block_start=${start_array[i]}
+                local block_end=${end_array[i]}
+                if [ -n "$block_start" ] && [ -n "$block_end" ]; then
+                    safe_sed_range "$block_start" "$block_end" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' >> "$auto_profiles_file"
+                fi
+            done
         fi
         
         # 手動管理プロファイルの情報を収集（最初の10個まで）

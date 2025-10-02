@@ -409,6 +409,59 @@ show_progress_spinner() {
     # スピナーをクリアしてカーソルを表示
     printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
+
+# プログレス表示付きスピナー
+show_progress_with_counter() {
+    local current="$1"
+    local total="$2"
+    local message="${3:-処理中}"
+    local i=0
+    local spin='⠧⠏⠛⠹⠼⠶'
+    local n=${#spin}
+    
+    # プログレス計算
+    local percentage=0
+    if [ "$total" -gt 0 ]; then
+        percentage=$(( (current * 100) / total ))
+    fi
+    
+    # プログレスバー作成（20文字）
+    local progress_width=20
+    local filled=$(( (current * progress_width) / total ))
+    local progress_bar=""
+    
+    for ((j=0; j<progress_width; j++)); do
+        if [ $j -lt $filled ]; then
+            progress_bar+="█"
+        else
+            progress_bar+="░"
+        fi
+    done
+    
+    printf "%s" "$ERASE_LINE"
+    printf "%s %s [%s] %d/%d (%d%%)" \
+        "${GREEN}${spin:i++%n:1}${RESET}" \
+        "$message" \
+        "$progress_bar" \
+        "$current" \
+        "$total" \
+        "$percentage"
+    printf "%s\r" "$HIDE_CURSOR"
+}
+
+# プログレス完了表示
+show_progress_complete() {
+    local total="$1"
+    local message="${2:-完了}"
+    
+    printf "%s" "$ERASE_LINE"
+    printf "%s %s [████████████████████] %d/%d (100%%)\n" \
+        "${GREEN}✅${RESET}" \
+        "$message" \
+        "$total" \
+        "$total"
+    printf "%s" "$SHOW_CURSOR"
+}
 # SSO設定情報の取得
 get_sso_config() {
     local config_file="$1"

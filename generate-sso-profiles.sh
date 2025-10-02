@@ -200,6 +200,16 @@ check_existing_profiles() {
         return 0  # 通常処理を続行
     fi
     
+    # アカウント数をカウント
+    local total_accounts
+    total_accounts=$(echo "$accounts_data" | wc -l | tr -d ' ')
+    if [ "$total_accounts" -gt "$max_accounts" ]; then
+        total_accounts="$max_accounts"
+    fi
+    
+    log_info "チェック対象: $total_accounts 個のアカウント"
+    echo
+    
     local existing_profiles=()
     local count=0
     
@@ -207,6 +217,9 @@ check_existing_profiles() {
     local temp_accounts_file
     temp_accounts_file=$(mktemp)
     echo "$accounts_data" > "$temp_accounts_file"
+    
+    # カーソルを非表示にする
+    printf "%s" "$HIDE_CURSOR"
     
     while IFS= read -r line && [ "$count" -lt "$max_accounts" ]; do
         local account_id
@@ -216,6 +229,9 @@ check_existing_profiles() {
         account_name=${line#* }
         
         if [ -n "$account_id" ] && [ -n "$account_name" ]; then
+            # プログレス表示
+            show_progress_with_counter "$((count + 1))" "$total_accounts" "アカウント確認中: $account_name"
+            
             # このアカウントのロール一覧を取得
             local roles_data
             if roles_data=$(get_account_roles_data "$account_id" 2>/dev/null); then
@@ -242,8 +258,14 @@ check_existing_profiles() {
             fi
             
             count=$((count + 1))
+            
+            # 少し待機（プログレス表示のため）
+            sleep 0.1
         fi
     done < "$temp_accounts_file"
+    
+    # プログレス完了表示
+    show_progress_complete "$total_accounts" "重複チェック完了"
     
     rm -f "$temp_accounts_file"
     
@@ -346,6 +368,13 @@ generate_profiles_for_accounts() {
         return 1
     fi
     
+    # アカウント数をカウント
+    local total_accounts
+    total_accounts=$(echo "$accounts_data" | wc -l | tr -d ' ')
+    if [ "$total_accounts" -gt "$max_accounts" ]; then
+        total_accounts="$max_accounts"
+    fi
+    
     # 設定ファイルのバックアップ
     if [ -f "$config_file" ]; then
         local backup_file
@@ -365,6 +394,13 @@ generate_profiles_for_accounts() {
     temp_accounts_file=$(mktemp)
     echo "$accounts_data" > "$temp_accounts_file"
     
+    echo
+    log_info "プロファイル生成開始: $total_accounts 個のアカウント"
+    echo
+    
+    # カーソルを非表示にする
+    printf "%s" "$HIDE_CURSOR"
+    
     while IFS= read -r line && [ "$count" -lt "$max_accounts" ]; do
         local account_id
         local account_name
@@ -373,7 +409,8 @@ generate_profiles_for_accounts() {
         account_name=${line#* }
         
         if [ -n "$account_id" ] && [ -n "$account_name" ]; then
-            log_info "アカウント処理中: $account_name ($account_id)"
+            # プログレス表示
+            show_progress_with_counter "$((count + 1))" "$total_accounts" "プロファイル生成中: $account_name"
             
             local roles_data
             if roles_data=$(get_account_roles_data "$account_id"); then
@@ -418,20 +455,27 @@ generate_profiles_for_accounts() {
                 done < "$temp_roles_file"
                 
                 rm -f "$temp_roles_file"
-                log_info "アカウント $account_name: $role_count 個のプロファイルを作成"
+                log_debug "アカウント $account_name: $role_count 個のプロファイルを処理"
             else
-                log_warning "アカウント $account_name のロール取得に失敗しました"
+                log_debug "アカウント $account_name のロール取得に失敗しました"
             fi
             
             count=$((count + 1))
+            
+            # 少し待機（プログレス表示のため）
+            sleep 0.1
         fi
     done < "$temp_accounts_file"
+    
+    # プログレス完了表示
+    show_progress_complete "$total_accounts" "プロファイル生成完了"
     
     rm -f "$temp_accounts_file"
     
     # 一括処理終了コメントを追加
     add_batch_end_comment "$config_file"
     
+    echo
     log_success "合計 $total_profiles 個のプロファイルを作成しました"
 }
 

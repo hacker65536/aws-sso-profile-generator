@@ -40,4 +40,20 @@ else
 fi
 echo
 
+# テスト5: プログレス表示機能
+echo "テスト5: プログレス表示機能"
+echo "プログレス表示のデモンストレーション:"
+
+# カーソルを非表示にする
+printf "%s" "$HIDE_CURSOR"
+
+for i in {1..10}; do
+    show_progress_with_counter "$i" "10" "アイテム処理中"
+    sleep 0.3
+done
+
+show_progress_complete "10" "処理完了"
+echo "✅ テスト5完了"
+echo
+
 echo "🎉 全てのスピナーテストが完了しました！"
