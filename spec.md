@@ -61,13 +61,14 @@ AWS SSO 環境でのプロファイル管理を効率化するツール群で、
 
 - `check-tools.sh` - 統合ツールチェック
 
-### 2. AWS 設定ファイルの確認
+### 2. AWS 設定ファイルとリージョン設定の確認
 
 #### 確認項目
 
 - 環境変数 `AWS_CONFIG_FILE` の設定状況
 - 設定ファイルの存在確認（デフォルト: `$HOME/.aws/config`）
 - 設定ファイルのサマリー表示
+- **リージョン設定の詳細確認**（AWS SSO コマンドに必須）
 
 #### 表示内容
 
@@ -93,6 +94,48 @@ SSO セッション:
 管理対象プロファイル:
   - another-company
   - test-company
+```
+
+#### リージョン設定確認機能
+
+AWS SSO 関連コマンド（`aws sso list-accounts`、`aws sso list-account-roles` 等）の実行には**リージョン設定が必須**のため、詳細な確認を実施：
+
+##### 確認内容
+
+1. **環境変数確認**
+   - `AWS_REGION`
+   - `AWS_DEFAULT_REGION`
+
+2. **AWS CLI 設定確認**
+   - `aws configure get region`
+   - `aws configure list`
+
+3. **設定一貫性チェック**
+   - 複数設定方法間の整合性確認
+   - 不整合時の警告表示
+   - 優先順位の説明（環境変数 > AWS CLI設定）
+
+4. **実効リージョン表示**
+   - 実際に AWS CLI コマンドで使用されるリージョン
+   - 設定ソースの特定
+
+##### 表示例
+
+```
+🌍 環境変数によるリージョン設定:
+  AWS_REGION: 未設定
+  AWS_DEFAULT_REGION: 未設定
+
+⚙️  AWS CLI設定によるリージョン:
+  aws configure get region: ap-northeast-1
+
+🔍 設定の一貫性チェック:
+✅ リージョン設定が一貫しています: ap-northeast-1
+✅ AWS SSO コマンドが正常に実行できます
+
+✅ AWS SSO コマンドで使用されるリージョン:
+✅ AWS CLI設定によりリージョンが設定されています
+  ap-northeast-1 (AWS CLI設定)
 ```
 
 #### 実装ファイル
@@ -458,6 +501,36 @@ source "$(dirname "$0")/common.sh"
 ./cleanup-generated-profiles.sh             # 自動生成プロファイルの削除
 ```
 
+## 重要な前提条件
+
+### AWS SSO コマンドのリージョン要件
+
+AWS SSO 関連の全てのコマンドは**リージョン設定が必須**です：
+
+- `aws sso list-accounts`
+- `aws sso list-account-roles`
+- その他の AWS SSO API 呼び出し
+
+#### 設定方法
+
+```bash
+# 環境変数による設定（推奨）
+export AWS_REGION=ap-northeast-1
+
+# AWS CLI 設定による設定
+aws configure set region ap-northeast-1
+```
+
+#### 確認方法
+
+```bash
+# 詳細なリージョン設定確認
+./check-aws-config.sh
+
+# 現在の設定値確認
+aws configure get region
+```
+
 ## 技術仕様
 
 ### 共通仕様
@@ -554,6 +627,15 @@ source "$(dirname "$0")/common.sh"
 - 各スクリプトのヘッダーコメント統一
 - メインセットアップスクリプトの表示メッセージ更新
 
+### v1.6 - リージョン設定確認機能強化
+
+- AWS SSO コマンド要件に対応したリージョン設定確認機能追加
+- 環境変数（AWS_REGION、AWS_DEFAULT_REGION）とAWS CLI設定の包括的確認
+- 設定一貫性チェックと不整合時の警告機能
+- 実効リージョン表示とエラー予防機能
+- スピナー表示問題の修正（psコマンド依存の解消）
+- バックグラウンド実行時の変数継承問題の解決
+
 ### 設計変更履歴
 
 1. **コメントマーカーの統一**: `auto-generated` → `aws-sso-config-generator` → `AWS_SSO_CONFIG_GENERATOR`
@@ -569,6 +651,8 @@ source "$(dirname "$0")/common.sh"
 11. **機能統合**: 個別管理機能 → 包括的な分析・表示機能への統合
 12. **ツール名統一**: 「AWS SSO 設定管理ツール」→「AWS SSO Profile Generator」
 13. **ブランディング統一**: プロファイル生成を中心とした一貫したメッセージング
+14. **リージョン設定確認強化**: AWS SSO コマンド要件に対応した包括的確認機能
+15. **互換性問題解決**: psコマンド依存とバックグラウンド実行の問題修正
 
 ### アーキテクチャ改善
 
@@ -583,3 +667,6 @@ source "$(dirname "$0")/common.sh"
 - **情報可視化**: 自動生成・手動管理プロファイルの明確な分類と統計表示
 - **ブランディング統一**: 「Profile Generator」として一貫したツール名とメッセージング
 - **目的明確化**: プロファイル生成機能を中心とした明確な価値提案
+- **要件対応**: AWS SSO コマンドのリージョン要件に対応した事前確認機能
+- **エラー予防**: 設定不備による実行時エラーの事前検出と解決ガイダンス
+- **互換性向上**: 異なる環境での安定動作を実現する技術的改善

@@ -13,6 +13,12 @@ source "$(dirname "$0")/common.sh"
 show_all_sso_sessions() {
     local config_file="$1"
     
+    # 設定ファイルの存在確認
+    if [ ! -f "$config_file" ]; then
+        echo "0" >&2
+        return 0
+    fi
+    
     log_info "利用可能なSSO Sessions:"
     
     local session_count=0
@@ -99,9 +105,8 @@ show_all_sso_sessions() {
     # 一時ファイルを削除
     rm -f "$temp_file"
     
-
     # セッション数を標準エラー出力に出力し、成功として0を返す
-    echo "$session_count" >&2
+    echo "${session_count:-0}" >&2
     return 0
 }
 
@@ -115,15 +120,26 @@ check_sso_config() {
     log_info "設定ファイル: $config_file"
     echo
 
+    # 設定ファイルの存在確認
+    if [ ! -f "$config_file" ]; then
+        log_error "AWS設定ファイルが見つかりません: $config_file"
+        log_info "設定ファイルを作成してください"
+        log_info "設定例:"
+        echo "  [sso-session session-name]"
+        echo "  sso_region = ap-northeast-1"
+        echo "  sso_start_url = https://your-domain.awsapps.com/start/"
+        echo "  sso_registration_scopes = sso:account:access"
+        return 1
+    fi
+
     # まず全てのSSO Sessionを表示
     local session_count
     session_count=$(show_all_sso_sessions "$config_file" 2>&1 >/dev/tty)
-
     
+    # session_countが空の場合は0に設定
+    session_count=${session_count:-0}
 
-    
-
-    if [ $session_count -eq 0 ]; then
+    if [ "$session_count" -eq 0 ]; then
         log_error "SSO Session設定が見つかりません"
         log_info "設定例:"
         echo "  [sso-session session-name]"
@@ -135,7 +151,7 @@ check_sso_config() {
 
     # 共通のSSO設定取得関数を使用（最初のセッションを使用）
     if get_sso_config "$config_file"; then
-        if [ $session_count -gt 1 ]; then
+        if [ "$session_count" -gt 1 ]; then
             log_info "複数のSSO Sessionが設定されています（合計: $session_count 個）"
             log_info "デフォルトで使用するセッション: $SSO_SESSION_NAME"
         else

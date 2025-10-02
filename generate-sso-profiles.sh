@@ -12,15 +12,24 @@ source "$(dirname "$0")/common.sh"
 
 # AWS CLI SSO: ListAccounts (ログメッセージなし版)
 get_accounts_data() {
+    # アクセストークンの存在確認
+    if [ -z "$ACCESS_TOKEN" ]; then
+        log_debug "ACCESS_TOKEN が設定されていません"
+        return 1
+    fi
+    
     local accounts_json
-    if accounts_json=$(aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>/dev/null); then
+    local aws_error
+    if accounts_json=$(aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>&1); then
         if echo "$accounts_json" | jq -e '.accountList' >/dev/null 2>&1; then
             echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
             return 0
         else
+            log_debug "AWS API レスポンスに accountList が含まれていません: $accounts_json"
             return 1
         fi
     else
+        log_debug "AWS CLI コマンドが失敗しました: $accounts_json"
         return 1
     fi
 }
@@ -285,6 +294,12 @@ main() {
     
     # アクセストークンの取得
     if ! get_access_token "$SSO_START_URL"; then
+        echo
+        log_error "SSO セッションが無効です。プロファイル生成を続行できません。"
+        log_info "以下のコマンドでSSO ログインを実行してください:"
+        echo "  aws sso login --sso-session $SSO_SESSION_NAME"
+        echo
+        log_info "ログイン後、再度このスクリプトを実行してください。"
         exit 1
     fi
     
@@ -307,7 +322,9 @@ main() {
     # 利用可能なアカウント数を事前に取得・表示
     echo
     local available_accounts_data
-    if available_accounts_data=$(run_with_spinner "利用可能なアカウント数を確認中" "get_accounts_data"); then
+    log_info "利用可能なアカウント数を確認中..."
+    
+    if available_accounts_data=$(get_accounts_data); then
         local available_count
         available_count=$(echo "$available_accounts_data" | wc -l | tr -d ' ')
         log_success "利用可能なアカウント数: $available_count 個"
@@ -317,7 +334,12 @@ main() {
             max_accounts="$available_count"
         fi
     else
-        log_warning "アカウント数の取得に失敗しました。デフォルト値を使用します。"
+        log_warning "アカウント数の取得に失敗しました。"
+        log_info "考えられる原因:"
+        echo "  - SSO セッションが期限切れ"
+        echo "  - AWS CLI の設定に問題がある"
+        echo "  - ネットワーク接続の問題"
+        log_info "デバッグモード実行: DEBUG=1 ./generate-sso-profiles.sh"
     fi
     
     echo

@@ -277,7 +277,7 @@ show_spinner() {
     # カーソルを非表示にする
     tput civis
     
-    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+    while kill -0 "$pid" 2>/dev/null; do
         local temp=${spinstr#?}
         printf "\r${BLUE}%s %c${NC}" "$message" "$spinstr"
         local spinstr=$temp${spinstr%"$temp"}
@@ -345,7 +345,7 @@ show_progress_spinner() {
     # カーソルを非表示にする
     tput civis
     
-    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+    while kill -0 "$pid" 2>/dev/null; do
         local char_index=$((i % 10))
         local char=$(echo "$progress_chars" | cut -c$((char_index + 1)))
         printf "\r${BLUE}%s %s${NC}" "$message" "$char"
