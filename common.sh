@@ -3,13 +3,23 @@
 # AWS SSO Profile Generator - 共通関数とカラー設定
 # 全スクリプトで共通利用される関数とカラー定義
 
+# ESCシーケンス定義
+ESC=$(printf '\033')
+CSI="${ESC}["
+
 # カラー定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-GRAY='\033[0;37m'
-NC='\033[0m' # No Color
+RESET="${CSI}0m"
+RED="${CSI}31m"
+GREEN="${CSI}32m"
+YELLOW="${CSI}33m"
+BLUE="${CSI}34m"
+GRAY="${CSI}37m"
+NC="$RESET" # No Color (後方互換性のため)
+
+# スピナー用制御文字
+ERASE_LINE="${CSI}2K"
+HIDE_CURSOR="${CSI}?25l"
+SHOW_CURSOR="${CSI}?25h"
 
 # ログ出力関数
 log_info() {
@@ -183,7 +193,8 @@ show_detailed_profile_summary() {
         while IFS= read -r line; do
             if [ -n "$line" ]; then
                 local session_name
-                session_name=$(echo "$line" | sed 's/.*\[sso-session \(.*\)\].*/\1/')
+                session_name=${line#*[sso-session }
+                session_name=${session_name%]*}
                 echo "  - $session_name"
             fi
         done <<< "$sso_sessions"
@@ -196,7 +207,8 @@ show_detailed_profile_summary() {
         while IFS= read -r line; do
             if [ -n "$line" ]; then
                 local customization_name
-                customization_name=$(echo "$line" | sed 's/.*# AWS SSO CONFIG \(.*\) START.*/\1/')
+                customization_name=${line#*# AWS SSO CONFIG }
+                customization_name=${customization_name% START*}
                 echo "  - $customization_name"
             fi
         done <<< "$managed_profiles"
@@ -322,29 +334,26 @@ show_profile_diff() {
 show_spinner() {
     local pid=$1
     local message="${2:-処理中}"
-    local delay=0.1
-    local spinstr='|/-\'
-    
-    # カーソルを非表示にする
-    tput civis
+    local i=0
+    local spin='⠧⠏⠛⠹⠼⠶'
+    local n=${#spin}
     
     while kill -0 "$pid" 2>/dev/null; do
-        local temp=${spinstr#?}
-        printf "\r${BLUE}%s %c${NC}" "$message" "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
+        sleep 0.1
+        printf "%s" "$ERASE_LINE"
+        printf "%s %s" "${GREEN}${spin:i++%n:1}${RESET}" "$message"
+        printf "%s\r" "$HIDE_CURSOR"
     done
     
     # スピナーをクリアしてカーソルを表示
-    printf "\r"
-    tput cnorm
+    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 
 # バックグラウンド実行でスピナー付きコマンド実行
 run_with_spinner() {
     local message="$1"
     shift
-    local command="$@"
+    local command="$*"
     
     # コマンドをバックグラウンドで実行
     eval "$command" &
@@ -364,49 +373,41 @@ run_with_spinner() {
 show_spinner_for_seconds() {
     local seconds="$1"
     local message="${2:-処理中}"
-    local delay=0.1
-    local spinstr='|/-\'
+    local i=0
+    local spin='⠧⠏⠛⠹⠼⠶'
+    local n=${#spin}
     local count=0
     local max_count=$((seconds * 10))
     
-    # カーソルを非表示にする
-    tput civis
-    
     while [ $count -lt $max_count ]; do
-        local temp=${spinstr#?}
-        printf "\r${BLUE}%s %c${NC}" "$message" "$spinstr"
-        local spinstr=$temp${spinstr%"$temp"}
-        sleep $delay
+        sleep 0.1
+        printf "%s" "$ERASE_LINE"
+        printf "%s %s" "${GREEN}${spin:i++%n:1}${RESET}" "$message"
+        printf "%s\r" "$HIDE_CURSOR"
         count=$((count + 1))
     done
     
     # スピナーをクリアしてカーソルを表示
-    printf "\r"
-    tput cnorm
+    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 
 # プログレスバー風スピナー
 show_progress_spinner() {
     local pid=$1
     local message="${2:-処理中}"
-    local delay=0.2
-    local progress_chars="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     local i=0
-    
-    # カーソルを非表示にする
-    tput civis
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local n=${#spin}
     
     while kill -0 "$pid" 2>/dev/null; do
-        local char_index=$((i % 10))
-        local char=$(echo "$progress_chars" | cut -c$((char_index + 1)))
-        printf "\r${BLUE}%s %s${NC}" "$message" "$char"
-        sleep $delay
-        i=$((i + 1))
+        sleep 0.2
+        printf "%s" "$ERASE_LINE"
+        printf "%s %s" "${BLUE}${spin:i++%n:1}${RESET}" "$message"
+        printf "%s\r" "$HIDE_CURSOR"
     done
     
     # スピナーをクリアしてカーソルを表示
-    printf "\r"
-    tput cnorm
+    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 # SSO設定情報の取得
 get_sso_config() {
@@ -488,10 +489,10 @@ get_sso_config() {
         fi
     done < "$config_file"
     
-    # グローバル変数に設定
-    SSO_SESSION_NAME="$session_name"
-    SSO_REGION="$sso_region"
-    SSO_START_URL="$sso_start_url"
+    # グローバル変数に設定（他のスクリプトで使用）
+    export SSO_SESSION_NAME="$session_name"
+    export SSO_REGION="$sso_region"
+    export SSO_START_URL="$sso_start_url"
     
     return 0
 }
@@ -576,7 +577,7 @@ get_access_token() {
             # タイムスタンプ比較をスキップ
             log_warning "セッション有効性の自動判定をスキップしました"
             echo "  有効期限: $local_expires"
-            ACCESS_TOKEN="$access_token"
+            export ACCESS_TOKEN="$access_token"
             return 0
         fi
         
@@ -593,7 +594,7 @@ get_access_token() {
         log_success "有効なアクセストークンを取得しました（有効期限情報なし）"
     fi
     
-    ACCESS_TOKEN="$access_token"
+    export ACCESS_TOKEN="$access_token"
     return 0
 }
 

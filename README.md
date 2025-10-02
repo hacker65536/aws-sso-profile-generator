@@ -82,7 +82,15 @@ brew install bash
 
 ### 共通ライブラリ
 
-- **`common.sh`** - カラー定義、ログ関数、共通ユーティリティ関数
+- **`common.sh`** - ESCシーケンス定義、カラー定義、ログ関数、スピナー表示、共通ユーティリティ関数
+
+### テスト環境
+
+- **`test/`** - 開発・デバッグ用テストスクリプト群
+  - `test_spinner.sh` - スピナー関数のテスト
+  - `test_common.sh` - 共通関数のテスト  
+  - `test_colors.sh` - カラー表示のテスト
+  - `run_all_tests.sh` - 全テスト実行スクリプト
 
 ## 使用方法
 
@@ -330,6 +338,28 @@ log_info "情報メッセージ"
 log_success "成功メッセージ"
 log_warning "警告メッセージ"
 log_error "エラーメッセージ"
+
+# スピナー表示の使用
+(sleep 3) &
+show_spinner $! "処理中"
+
+# 固定時間スピナー
+show_spinner_for_seconds 2 "読み込み中"
+
+# スピナー付きコマンド実行
+run_with_spinner "ファイル作成中" "sleep 2 && touch /tmp/test"
+```
+
+### テスト実行
+
+```bash
+# 個別テスト実行
+./test/test_spinner.sh
+./test/test_common.sh
+./test/test_colors.sh
+
+# 全テスト実行
+./test/run_all_tests.sh
 ```
 
 ### 設定ファイルパスの取得
@@ -358,6 +388,13 @@ fi
 
 ## 更新履歴
 
+- **v1.8** - コード品質向上とテスト環境整備
+  - shellcheck完全対応（全警告解決）
+  - スピナー関数の改良（Unicodeスピナー、ESCシーケンス統一）
+  - テストディレクトリ作成（test/）
+  - 開発・デバッグ用テストスクリプト追加
+- **v1.7** - プロファイル品質チェック機能追加
+- **v1.6** - リージョン設定確認機能強化
 - **v1.5** - ツール名変更とブランディング統一
 - **v1.4** - プロファイル分析機能追加
 - **v1.3** - 複数 SSO Session 対応

@@ -63,7 +63,8 @@ check_region_config() {
             log_success "AWS SSO コマンドが正常に実行できます"
         else
             # 重複を除去して一意な値を確認
-            local unique_regions=($(printf '%s\n' "${regions[@]}" | sort -u))
+            local unique_regions
+            mapfile -t unique_regions < <(printf '%s\n' "${regions[@]}" | sort -u)
             
             if [ ${#unique_regions[@]} -eq 1 ]; then
                 log_success "複数の設定方法でリージョンが一貫しています: ${unique_regions[0]}"
@@ -135,10 +136,6 @@ check_aws_cli_config() {
 # プロファイル情報の解析
 parse_profile_info() {
     local config_file="$1"
-    
-    # SSO セッション情報を取得
-    local sso_sessions
-    sso_sessions=$(grep -n "^\[sso-session " "$config_file" 2>/dev/null | head -5 || true)
     
     # 通常のプロファイル情報を取得（カウント用）
     

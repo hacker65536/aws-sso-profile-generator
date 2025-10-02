@@ -19,7 +19,6 @@ get_accounts_data() {
     fi
     
     local accounts_json
-    local aws_error
     if accounts_json=$(unset AWS_PROFILE; aws sso list-accounts --access-token "$ACCESS_TOKEN" --region "$SSO_REGION" --output json 2>&1); then
         if echo "$accounts_json" | jq -e '.accountList' >/dev/null 2>&1; then
             echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
@@ -214,7 +213,7 @@ check_existing_profiles() {
         local account_name
         
         account_id=$(echo "$line" | grep -o '^[0-9]\+')
-        account_name=$(echo "$line" | sed 's/^[0-9][0-9]* //')
+        account_name=${line#* }
         
         if [ -n "$account_id" ] && [ -n "$account_name" ]; then
             # このアカウントのロール一覧を取得
@@ -257,7 +256,7 @@ check_existing_profiles() {
         echo
         echo "重複するプロファイル名（最初の10個）:"
         for i in "${!existing_profiles[@]}"; do
-            if [ $i -lt 10 ]; then
+            if [ "$i" -lt 10 ]; then
                 echo "  - ${existing_profiles[i]}"
             fi
         done
@@ -371,7 +370,7 @@ generate_profiles_for_accounts() {
         local account_name
         
         account_id=$(echo "$line" | grep -o '^[0-9]\+')
-        account_name=$(echo "$line" | sed 's/^[0-9][0-9]* //')
+        account_name=${line#* }
         
         if [ -n "$account_id" ] && [ -n "$account_name" ]; then
             log_info "アカウント処理中: $account_name ($account_id)"

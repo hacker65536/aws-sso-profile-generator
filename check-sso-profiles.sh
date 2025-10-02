@@ -212,8 +212,10 @@ analyze_profiles() {
         echo "✋ 手動管理プロファイル詳細:"
         
         # 自動生成プロファイル以外の全プロファイルを取得
-        local temp_file=$(mktemp)
-        local auto_profiles_file=$(mktemp)
+        local temp_file
+        local auto_profiles_file
+        temp_file=$(mktemp)
+        auto_profiles_file=$(mktemp)
         
         # 自動生成プロファイル名を一時ファイルに保存
         if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
@@ -228,7 +230,6 @@ analyze_profiles() {
         all_profiles=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/')
         
         # 手動管理プロファイル名を抽出（自動生成以外）
-        local manual_profiles_list=""
         echo "$all_profiles" | while IFS= read -r profile_name; do
             if ! grep -Fxq "$profile_name" "$auto_profiles_file" 2>/dev/null; then
                 echo "$profile_name"
@@ -302,14 +303,14 @@ show_auto_generated_details() {
         
         if [ "$show_all" = "true" ]; then
             display_limit=300
-            if [ $profile_count -gt 300 ]; then
+            if [ "$profile_count" -gt 300 ]; then
                 display_count=300
                 echo "🔍 プロファイル一覧（最初の300個）:"
             else
                 echo "🔍 プロファイル一覧（全 $profile_count 個）:"
             fi
         else
-            if [ $profile_count -gt 10 ]; then
+            if [ "$profile_count" -gt 10 ]; then
                 display_count=10
                 echo "🔍 プロファイル一覧（最初の10個）:"
             else
@@ -324,7 +325,7 @@ show_auto_generated_details() {
             [ -n "$profile" ] && echo "  - $profile"
         done
         
-        if [ $profile_count -gt $display_count ]; then
+        if [ "$profile_count" -gt "$display_count" ]; then
             echo "  ... 他 $((profile_count - display_count)) 個"
         fi
         
@@ -386,8 +387,10 @@ show_manual_profiles_details() {
         log_success "手動管理プロファイルが見つかりました"
         echo
         
-        local temp_file=$(mktemp)
-        local auto_profiles_file=$(mktemp)
+        local temp_file
+        local auto_profiles_file
+        temp_file=$(mktemp)
+        auto_profiles_file=$(mktemp)
         echo "PROFILE SESSION ACCOUNT ROLE REGION" > "$temp_file"
         
         # 自動生成プロファイル名を一時ファイルに保存
@@ -397,12 +400,10 @@ show_manual_profiles_details() {
         
         # 手動管理プロファイルの情報を収集（最初の10個まで）
         local count=0
-        local current_profile=""
         local sso_session=""
         local account_id=""
         local role_name=""
         local region=""
-        local in_manual_profile=false
         
         # より確実なアプローチ：sedとgrepを組み合わせて使用
         local display_limit=10
@@ -544,7 +545,7 @@ show_duplicate_details() {
                         local end_line=$((line_num + next_profile_line - 1))
                         sed -n "${line_num},${end_line}p" "$config_file" | head -10 | sed 's/^/    /'
                     else
-                        tail -n +$line_num "$config_file" | head -10 | sed 's/^/    /'
+                        tail -n +"$line_num" "$config_file" | head -10 | sed 's/^/    /'
                     fi
                     
                     count=$((count + 1))
