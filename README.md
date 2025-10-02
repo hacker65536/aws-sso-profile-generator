@@ -52,7 +52,7 @@ brew install bash
 1. **全体セットアップの実行**
 
    ```bash
-   ./setup-aws-sso.sh
+   ./check-environment.sh
    ```
 
 2. **SSO ログイン**
@@ -74,7 +74,7 @@ brew install bash
 
 ### メインスクリプト
 
-- **`setup-aws-sso.sh`** - 全ステップを順次実行するメインスクリプト
+- **`check-environment.sh`** - 全ステップを順次実行する環境チェックスクリプト
 
 ### 個別機能スクリプト
 

@@ -17,7 +17,7 @@ AWS SSO 環境でのプロファイル管理を効率化するツール群で、
 
 ### メインスクリプト
 
-- **setup-aws-sso.sh** - 全ステップを順次実行するメインスクリプト
+- **check-environment.sh** - 全ステップを順次実行する環境チェックスクリプト
 
 ### 個別機能スクリプト
 
@@ -827,7 +827,7 @@ done
 ### 全体セットアップ
 
 ```bash
-./setup-aws-sso.sh
+./check-environment.sh
 ```
 
 ### 個別実行
