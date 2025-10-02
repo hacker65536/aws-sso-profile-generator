@@ -479,6 +479,33 @@ generate_profiles_for_accounts() {
     log_success "合計 $total_profiles 個のプロファイルを作成しました"
 }
 
+# ヘルプメッセージの表示
+show_usage() {
+    echo "使用方法: $0 [OPTIONS]"
+    echo
+    echo "AWS SSO プロファイルの自動生成を行います。"
+    echo
+    echo "オプション:"
+    echo "  --help, -h          このヘルプメッセージを表示"
+    echo "  --force, -f         デフォルト値で自動実行（対話なし）"
+    echo
+    echo "例:"
+    echo "  $0                  # 対話モードで実行"
+    echo "  $0 --force          # デフォルト値で自動実行"
+    echo "  $0 --help           # ヘルプを表示"
+    echo
+    echo "デフォルト設定:"
+    echo "  プレフィックス: autogen"
+    echo "  処理アカウント数: 利用可能な全アカウント"
+    echo "  リージョン: SSO設定から取得"
+    echo "  正規化方式: minimal（スペース→アンダースコアのみ）"
+    echo
+    echo "注意事項:"
+    echo "  - AWS SSO セッションが有効である必要があります"
+    echo "  - 既存プロファイルとの重複がある場合は確認が必要です"
+    echo "  - --force オプション使用時は重複プロファイルを自動上書きします"
+}
+
 # AWS_PROFILE環境変数のチェックと処理
 check_and_handle_aws_profile() {
     if [ -n "$AWS_PROFILE" ]; then
@@ -504,9 +531,36 @@ check_and_handle_aws_profile() {
 
 # メイン実行
 main() {
+    local force_mode=false
+    
+    # コマンドライン引数の処理
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --help|-h)
+                show_usage
+                exit 0
+                ;;
+            --force|-f)
+                force_mode=true
+                shift
+                ;;
+            *)
+                log_error "不明なオプション: $1"
+                echo
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+    
     echo "🔄 AWS SSO プロファイル自動生成"
     echo "==============================="
     echo
+    
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: デフォルト値で自動実行します"
+        echo
+    fi
     
     # AWS_PROFILE環境変数のチェック
     check_and_handle_aws_profile
@@ -546,17 +600,21 @@ main() {
     
     # デフォルト設定
     local prefix="autogen"
-    local max_accounts=5
     local region="$SSO_REGION"  # SSO設定から取得
     
     # ユーザー入力の取得
     echo
-    read -r -p "プロファイル名のプレフィックス (デフォルト: $prefix): " user_prefix
-    prefix=${user_prefix:-$prefix}
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: プレフィックス '$prefix' を使用します"
+    else
+        read -r -p "プロファイル名のプレフィックス (デフォルト: $prefix): " user_prefix
+        prefix=${user_prefix:-$prefix}
+    fi
     
     # 利用可能なアカウント数を事前に取得・表示
     echo
     local available_accounts_data
+    local max_accounts
     log_info "利用可能なアカウント数を確認中..."
     
     if available_accounts_data=$(get_accounts_data); then
@@ -564,10 +622,8 @@ main() {
         available_count=$(echo "$available_accounts_data" | wc -l | tr -d ' ')
         log_success "利用可能なアカウント数: $available_count 個"
         
-        # デフォルト値を利用可能数に調整
-        if [ "$max_accounts" -gt "$available_count" ]; then
-            max_accounts="$available_count"
-        fi
+        # デフォルト値を利用可能な全アカウント数に設定
+        max_accounts="$available_count"
     else
         log_warning "アカウント数の取得に失敗しました。"
         log_info "考えられる原因:"
@@ -575,24 +631,40 @@ main() {
         echo "  - AWS CLI の設定に問題がある"
         echo "  - ネットワーク接続の問題"
         log_info "デバッグモード実行: DEBUG=1 ./generate-sso-profiles.sh"
+        
+        # フォールバック値として5を設定
+        max_accounts=5
+        log_info "フォールバック値として $max_accounts 個のアカウントを設定しました"
     fi
     
     echo
-    read -r -p "処理するアカウント数 (デフォルト: $max_accounts): " user_max_accounts
-    max_accounts=${user_max_accounts:-$max_accounts}
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: 処理アカウント数 $max_accounts 個（全アカウント）を使用します"
+    else
+        read -r -p "処理するアカウント数 (デフォルト: $max_accounts - 全アカウント): " user_max_accounts
+        max_accounts=${user_max_accounts:-$max_accounts}
+    fi
     
-    read -r -p "デフォルトリージョン (デフォルト: $region): " user_region
-    region=${user_region:-$region}
-    
-    echo
-    echo "アカウント名の正規化方式を選択してください:"
-    echo "  1. minimal - スペース→アンダースコアのみ（大文字・ハイフンはそのまま）"
-    echo "  2. full    - 小文字変換 + ハイフン→アンダースコア + スペース→アンダースコア"
-    read -r -p "正規化方式 (1 または 2, デフォルト: 1): " normalization_choice
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: デフォルトリージョン '$region' を使用します"
+    else
+        read -r -p "デフォルトリージョン (デフォルト: $region): " user_region
+        region=${user_region:-$region}
+    fi
     
     local normalization_type="minimal"
-    if [ "$normalization_choice" = "2" ]; then
-        normalization_type="full"
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: 正規化方式 'minimal' を使用します"
+    else
+        echo
+        echo "アカウント名の正規化方式を選択してください:"
+        echo "  1. minimal - スペース→アンダースコアのみ（大文字・ハイフンはそのまま）"
+        echo "  2. full    - 小文字変換 + ハイフン→アンダースコア + スペース→アンダースコア"
+        read -r -p "正規化方式 (1 または 2, デフォルト: 1): " normalization_choice
+        
+        if [ "$normalization_choice" = "2" ]; then
+            normalization_type="full"
+        fi
     fi
     
     echo
@@ -612,31 +684,45 @@ main() {
     
     # 既存プロファイルのチェック
     local overwrite_mode=true
-    check_existing_profiles "$config_file" "$prefix" "$max_accounts" "$normalization_type"
-    local check_result=$?
     
-    case $check_result in
-        0)
-            overwrite_mode=true  # 上書きモードまたは重複なし
-            ;;
-        1)
-            overwrite_mode=false  # スキップモード
-            ;;
-        2)
-            log_info "プロファイル生成をキャンセルしました"
-            exit 0
-            ;;
-    esac
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: 既存プロファイルの重複チェックをスキップし、自動上書きします"
+        overwrite_mode=true
+    else
+        check_existing_profiles "$config_file" "$prefix" "$max_accounts" "$normalization_type"
+        local check_result=$?
+        
+        case $check_result in
+            0)
+                overwrite_mode=true  # 上書きモードまたは重複なし
+                ;;
+            1)
+                overwrite_mode=false  # スキップモード
+                ;;
+            2)
+                log_info "プロファイル生成をキャンセルしました"
+                exit 0
+                ;;
+        esac
+    fi
     
     echo
-    read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    if [ "$force_mode" = true ]; then
+        log_info "フォースモード: 自動的にプロファイル生成を開始します"
         generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$overwrite_mode"
         echo
         log_success "プロファイル自動生成が完了しました！"
         log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
     else
-        log_info "プロファイル生成をキャンセルしました"
+        read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$overwrite_mode"
+            echo
+            log_success "プロファイル自動生成が完了しました！"
+            log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+        else
+            log_info "プロファイル生成をキャンセルしました"
+        fi
     fi
 }
 
