@@ -53,6 +53,40 @@ get_current_date() {
     date '+%Y/%m/%d'
 }
 
+# 現在のタイムゾーン情報を取得
+get_current_timezone() {
+    date '+%Z %z'
+}
+
+# UTC時刻をローカルタイムゾーンに変換
+convert_utc_to_local() {
+    local utc_time="$1"
+    local local_time=""
+    local timezone_info
+    timezone_info=$(get_current_timezone)
+    
+    if command -v gdate &> /dev/null; then
+        # GNU date (Linux/gdate on macOS)
+        local_time=$(gdate -d "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
+        if [ -n "$local_time" ]; then
+            echo "$local_time $timezone_info"
+        else
+            echo "$utc_time (変換失敗)"
+        fi
+    elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" &>/dev/null; then
+        # BSD date (macOS default)
+        local_time=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
+        if [ -n "$local_time" ]; then
+            echo "$local_time $timezone_info"
+        else
+            echo "$utc_time (変換失敗)"
+        fi
+    else
+        # フォールバック: 元の時刻にタイムゾーン情報を付加
+        echo "$utc_time (UTC) → ローカル変換不可、現在のTZ: $timezone_info"
+    fi
+}
+
 # プロファイル統計の表示
 show_profile_stats() {
     local config_file="$1"
@@ -503,13 +537,7 @@ get_access_token() {
     if [ -n "$expires_at" ]; then
         # 有効期限をローカルタイムゾーンで表示
         local local_expires
-        if command -v gdate &> /dev/null; then
-            local_expires=$(gdate -d "$expires_at" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo "$expires_at")
-        elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%Y-%m-%d %H:%M:%S %Z" &>/dev/null; then
-            local_expires=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%Y-%m-%d %H:%M:%S %Z" 2>/dev/null || echo "$expires_at")
-        else
-            local_expires="$expires_at"
-        fi
+        local_expires=$(convert_utc_to_local "$expires_at")
         
         # 現在時刻と比較して有効性をチェック
         local current_timestamp
@@ -602,13 +630,7 @@ check_sso_session_status() {
     if [ -n "$expires_at" ]; then
         # 有効期限をローカルタイムゾーンで表示
         local local_expires
-        if command -v gdate &> /dev/null; then
-            local_expires=$(gdate -d "$expires_at" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo "$expires_at")
-        elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%Y-%m-%d %H:%M:%S %Z" &>/dev/null; then
-            local_expires=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%Y-%m-%d %H:%M:%S %Z" 2>/dev/null || echo "$expires_at")
-        else
-            local_expires="$expires_at"
-        fi
+        local_expires=$(convert_utc_to_local "$expires_at")
         
         # 現在時刻と比較して有効性をチェック
         local current_timestamp
