@@ -8,6 +8,86 @@ set -e
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/common.sh"
 
+# BSD/GNU grep対応の安全なカウント関数
+safe_grep_count() {
+    local pattern="$1"
+    local file="$2"
+    
+    # ファイルが存在しない、または空の場合は0を返す
+    if [ ! -f "$file" ] || [ ! -s "$file" ]; then
+        echo "0"
+        return 0
+    fi
+    
+    # grepでカウント（BSD/GNU grep両対応）
+    local count
+    count=$(grep -c "$pattern" "$file" 2>/dev/null)
+    local exit_code=$?
+    
+    # grepが何も見つからない場合（exit code 1）は0を返す
+    if [ $exit_code -eq 1 ]; then
+        echo "0"
+    elif [ $exit_code -eq 0 ]; then
+        echo "$count"
+    else
+        # その他のエラー（ファイル読み込みエラーなど）
+        echo "0"
+    fi
+}
+
+# パイプ入力に対する安全なgrepカウント
+safe_pipe_grep_count() {
+    local pattern="$1"
+    local input="$2"
+    
+    # 入力が空の場合は0を返す
+    if [ -z "$input" ]; then
+        echo "0"
+        return 0
+    fi
+    
+    # grepでカウント（BSD/GNU grep両対応）
+    local count
+    count=$(echo "$input" | grep -c "$pattern" 2>/dev/null)
+    local exit_code=$?
+    
+    # grepが何も見つからない場合（exit code 1）は0を返す
+    if [ $exit_code -eq 1 ]; then
+        echo "0"
+    elif [ $exit_code -eq 0 ]; then
+        echo "$count"
+    else
+        # その他のエラー
+        echo "0"
+    fi
+}
+
+# 安全な数値取得
+safe_number() {
+    local value="$1"
+    # 最初の数値のみを取得し、空の場合は0を返す
+    value=$(echo "$value" | head -1 | tr -d '\n\r' | sed 's/[^0-9]//g')
+    if [ -z "$value" ]; then
+        echo "0"
+    else
+        echo "$value"
+    fi
+}
+
+# 安全なsedコマンド実行
+safe_sed_range() {
+    local start_line="$1"
+    local end_line="$2"
+    local file="$3"
+    
+    # 行番号が数値かつ空でないことを確認
+    if [[ "$start_line" =~ ^[0-9]+$ ]] && [[ "$end_line" =~ ^[0-9]+$ ]] && [ "$start_line" -le "$end_line" ]; then
+        sed -n "${start_line},${end_line}p" "$file" 2>/dev/null
+    else
+        echo ""
+    fi
+}
+
 # プロファイル分析の実行
 analyze_profiles() {
     local config_file="$1"
@@ -30,16 +110,22 @@ analyze_profiles() {
     auto_start_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
     auto_end_line=$(grep -n "# AWS_SSO_CONFIG_GENERATOR END" "$config_file" 2>/dev/null | cut -d: -f1 || echo "")
     
-    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-        auto_generated_count=$(sed -n "${auto_start_line},${auto_end_line}p" "$config_file" | grep -c "^\[profile " || echo 0)
+    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ] && [ "$auto_start_line" != "" ] && [ "$auto_end_line" != "" ]; then
+        auto_generated_count=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")")
     fi
+    
+    # auto_generated_countが空文字列の場合は0に設定
+    auto_generated_count=$(safe_number "$auto_generated_count")
     
     # 全プロファイル数の取得
     local total_profiles
-    total_profiles=$(grep -c "^\[profile " "$config_file" 2>/dev/null || echo 0)
+    total_profiles=$(safe_grep_count "^\[profile " "$config_file")
     
     # 手動管理プロファイル数（自動生成以外の全て）
     local manual_count
+    # 数値の安全な計算
+    total_profiles=$(safe_number "$total_profiles")
+    auto_generated_count=$(safe_number "$auto_generated_count")
     manual_count=$((total_profiles - auto_generated_count))
     
     # 分析結果の表示
@@ -52,10 +138,10 @@ analyze_profiles() {
     echo
     
     # 詳細情報の表示
-    if [ $auto_generated_count -gt 0 ]; then
+    if [ "${auto_generated_count:-0}" -gt 0 ]; then
         echo "🤖 自動生成プロファイル詳細:"
         local auto_section
-        auto_section=$(sed -n "${auto_start_line},${auto_end_line}p" "$config_file")
+        auto_section=$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")
         
         # 生成日時の取得
         local generation_time
@@ -70,13 +156,13 @@ analyze_profiles() {
             [ -n "$profile" ] && echo "    - $profile"
         done
         
-        if [ $auto_generated_count -gt 5 ]; then
+        if [ "${auto_generated_count:-0}" -gt 5 ]; then
             echo "    ... 他 $((auto_generated_count - 5)) 個"
         fi
         echo
     fi
     
-    if [ $manual_count -gt 0 ]; then
+    if [ "${manual_count:-0}" -gt 0 ]; then
         echo "✋ 手動管理プロファイル詳細:"
         
         # 自動生成プロファイル以外の全プロファイルを取得
@@ -85,7 +171,7 @@ analyze_profiles() {
         
         # 自動生成プロファイル名を一時ファイルに保存
         if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-            sed -n "${auto_start_line},${auto_end_line}p" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
+            safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
         fi
         
         # 手動管理プロファイルの最初の5個を表示
@@ -147,7 +233,7 @@ show_auto_generated_details() {
     
     if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
         local auto_section
-        auto_section=$(sed -n "${auto_start_line},${auto_end_line}p" "$config_file")
+        auto_section=$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")
         
         log_success "自動生成プロファイルが見つかりました"
         echo
@@ -160,7 +246,7 @@ show_auto_generated_details() {
         
         # プロファイル数のカウント
         local profile_count
-        profile_count=$(echo "$auto_section" | grep -c "^\[profile " || echo 0)
+        profile_count=$(safe_pipe_grep_count "^\[profile " "$auto_section")
         echo "  プロファイル数: $profile_count 個"
         echo
         
@@ -235,19 +321,22 @@ show_manual_profiles_details() {
     
     # 全プロファイル数の取得
     local total_profiles
-    total_profiles=$(grep -c "^\[profile " "$config_file" 2>/dev/null || echo 0)
+    total_profiles=$(safe_grep_count "^\[profile " "$config_file")
     
     # 自動生成プロファイル数の取得
     local auto_generated_count=0
-    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-        auto_generated_count=$(sed -n "${auto_start_line},${auto_end_line}p" "$config_file" | grep -c "^\[profile " || echo 0)
+    if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ] && [ "$auto_start_line" != "" ] && [ "$auto_end_line" != "" ]; then
+        auto_generated_count=$(safe_pipe_grep_count "^\[profile " "$(safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file")")
     fi
     
     # 手動管理プロファイル数（自動生成以外の全て）
     local manual_count
+    # 数値の安全な計算
+    total_profiles=$(safe_number "$total_profiles")
+    auto_generated_count=$(safe_number "$auto_generated_count")
     manual_count=$((total_profiles - auto_generated_count))
     
-    if [ $manual_count -gt 0 ]; then
+    if [ "${manual_count:-0}" -gt 0 ]; then
         log_success "手動管理プロファイルが見つかりました"
         echo
         
@@ -257,7 +346,7 @@ show_manual_profiles_details() {
         
         # 自動生成プロファイル名を一時ファイルに保存
         if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-            sed -n "${auto_start_line},${auto_end_line}p" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
+            safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
         fi
         
         # 手動管理プロファイルの情報を収集（最初の10個まで）
