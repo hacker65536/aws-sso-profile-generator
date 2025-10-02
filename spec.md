@@ -23,7 +23,7 @@ AWS SSO 環境でのプロファイル管理を効率化するツール群で、
 
 - **check-tools.sh** - 必要ツールの存在・バージョン確認
 - **check-aws-config.sh** - AWS 設定ファイルの確認とサマリー表示
-- **check-awssso-config.sh** - SSO 設定とセッション状態の確認
+- **check-sso-config.sh** - SSO 設定とセッション状態の確認
 - **check-sso-profiles.sh** - SSO プロファイルの分析・一覧表示
 - **generate-sso-profiles.sh** - SSO プロファイルの自動一括生成
 - **cleanup-generated-profiles.sh** - 自動生成プロファイルの削除
@@ -176,13 +176,13 @@ sso_registration_scopes = sso:account:access
 
 ```bash
 # 全セッションを表示し、最初のセッションを使用
-./check-awssso-config.sh
+./check-sso-config.sh
 
 # 特定のセッションを確認
-./check-awssso-config.sh session-name
+./check-sso-config.sh session-name
 
 # ヘルプ表示
-./check-awssso-config.sh --help
+./check-sso-config.sh --help
 ```
 
 #### 表示例（複数セッション）
@@ -205,7 +205,7 @@ sso_registration_scopes = sso:account:access
 
 #### 実装ファイル
 
-- `check-awssso-config.sh`
+- `check-sso-config.sh`
 
 ### 4. SSO プロファイルの分析
 
@@ -482,9 +482,9 @@ source "$(dirname "$0")/common.sh"
 ./check-aws-config.sh
 
 # SSO設定確認
-./check-awssso-config.sh                    # 全セッション表示、最初のセッション使用
-./check-awssso-config.sh session-name       # 特定セッション確認
-./check-awssso-config.sh --help             # ヘルプ表示
+./check-sso-config.sh                    # 全セッション表示、最初のセッション使用
+./check-sso-config.sh session-name       # 特定セッション確認
+./check-sso-config.sh --help             # ヘルプ表示
 
 # プロファイル分析
 ./check-sso-profiles.sh                     # 全プロファイルの分析

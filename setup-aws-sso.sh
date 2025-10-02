@@ -21,7 +21,7 @@ echo
 
 # Step 3: SSO設定の確認・作成
 echo "📋 Step 3: SSO設定の確認・作成"
-./check-awssso-config.sh
+./check-sso-config.sh
 echo
 
 echo "🎉 AWS SSO Profile Generator セットアップが完了しました！"
@@ -29,5 +29,5 @@ echo
 echo "各ステップを個別に実行したい場合:"
 echo "  ./check-tools.sh           - 必要ツール確認"
 echo "  ./check-aws-config.sh      - AWS設定ファイル確認"
-echo "  ./check-awssso-config.sh   - SSO設定確認・作成"
+echo "  ./check-sso-config.sh   - SSO設定確認・作成"
 echo "  ./generate-sso-profiles.sh - プロファイル自動生成（メイン機能）"

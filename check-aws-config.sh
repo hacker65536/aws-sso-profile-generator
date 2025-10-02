@@ -200,7 +200,7 @@ main() {
     check_region_config
     
     echo
-    log_info "次のステップ: ./check-awssso-config.sh を実行してSSO設定を確認してください"
+    log_info "次のステップ: ./check-sso-config.sh を実行してSSO設定を確認してください"
     log_info "注意: AWS SSO コマンドにはリージョン設定が必須です"
 }
 

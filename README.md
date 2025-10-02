@@ -71,7 +71,7 @@ brew install bash
 
 - **`check-tools.sh`** - 必要ツールの存在・バージョン確認
 - **`check-aws-config.sh`** - AWS 設定ファイルとリージョン設定の確認
-- **`check-awssso-config.sh`** - SSO 設定とセッション状態の確認
+- **`check-sso-config.sh`** - SSO 設定とセッション状態の確認
 - **`check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示
 - **`generate-sso-profiles.sh`** - SSO プロファイルの自動一括生成
 - **`cleanup-generated-profiles.sh`** - 自動生成プロファイルの削除
@@ -92,7 +92,7 @@ brew install bash
 ./check-aws-config.sh
 
 # SSO設定の確認
-./check-awssso-config.sh
+./check-sso-config.sh
 ```
 
 ### 2. プロファイル分析
@@ -194,10 +194,10 @@ full:     'my_perfect_web_service_prod'
 
 ```bash
 # 全セッション表示、最初のセッション使用
-./check-awssso-config.sh
+./check-sso-config.sh
 
 # 特定セッション確認
-./check-awssso-config.sh session-name
+./check-sso-config.sh session-name
 ```
 
 ### セキュリティ機能
