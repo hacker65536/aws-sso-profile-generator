@@ -20,7 +20,7 @@ get_accounts_data() {
     
     local accounts_json
     local aws_error
-    if accounts_json=$(aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>&1); then
+    if accounts_json=$(AWS_PROFILE="" aws sso list-accounts --access-token "$ACCESS_TOKEN" --output json 2>&1); then
         if echo "$accounts_json" | jq -e '.accountList' >/dev/null 2>&1; then
             echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
             return 0
@@ -45,7 +45,7 @@ list_accounts() {
         return 0
     else
         log_error "アカウント一覧の取得に失敗しました"
-        show_sso_login_command
+        show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
 }
@@ -59,7 +59,7 @@ get_account_roles_data() {
     fi
     
     local roles_json
-    if roles_json=$(aws sso list-account-roles --access-token "$ACCESS_TOKEN" --account-id "$account_id" --output json 2>/dev/null); then
+    if roles_json=$(AWS_PROFILE="" aws sso list-account-roles --access-token "$ACCESS_TOKEN" --account-id "$account_id" --output json 2>/dev/null); then
         if echo "$roles_json" | jq -e '.roleList' >/dev/null 2>&1; then
             echo "$roles_json" | jq -r '.roleList[] | "\(.roleName)"'
             return 0
@@ -436,11 +436,37 @@ generate_profiles_for_accounts() {
     log_success "合計 $total_profiles 個のプロファイルを作成しました"
 }
 
+# AWS_PROFILE環境変数のチェックと処理
+check_and_handle_aws_profile() {
+    if [ -n "$AWS_PROFILE" ]; then
+        log_warning "AWS_PROFILE環境変数が設定されています: $AWS_PROFILE"
+        echo
+        log_info "AWS_PROFILEが設定されていると、以下の問題が発生する可能性があります:"
+        echo "  - 指定されたプロファイルが存在しない場合、AWS SSOコマンドが失敗"
+        echo "  - プロファイル削除後の再生成時にエラーが発生"
+        echo "  - 意図しないプロファイルでのAWS API呼び出し"
+        echo
+        log_info "安全のため、AWS_PROFILE環境変数を一時的にunsetして続行します"
+        
+        # 元の値を保存（情報表示用）
+        local original_aws_profile="$AWS_PROFILE"
+        unset AWS_PROFILE
+        
+        log_success "AWS_PROFILE環境変数をunsetしました"
+        log_info "元の値: $original_aws_profile"
+        log_info "このスクリプト終了後、AWS_PROFILEは元の状態に戻ります"
+        echo
+    fi
+}
+
 # メイン実行
 main() {
     echo "🔄 AWS SSO プロファイル自動生成"
     echo "==============================="
     echo
+    
+    # AWS_PROFILE環境変数のチェック
+    check_and_handle_aws_profile
     
     # 設定ファイルの取得
     local config_file
