@@ -241,8 +241,8 @@ AWS 設定ファイル内のプロファイルを自動生成・手動管理に�
 🤖 自動生成プロファイル詳細:
   生成日時: 2024/12/10 15:30:45
   プロファイル例（最初の5個）:
-    - autogen-MyCompany-123456789012:PowerUserAccess
-    - autogen-MyCompany-123456789012:ReadOnlyAccess
+    - awssso-MyCompany-123456789012:PowerUserAccess
+    - awssso-MyCompany-123456789012:ReadOnlyAccess
     ... 他 115 個
 
 ✋ 手動管理プロファイル詳細:
@@ -397,7 +397,7 @@ full:     'my_perfect_web_service_prod'
 
 #### デフォルト設定（--forceモード）
 
-- **プレフィックス**: `autogen`
+- **プレフィックス**: `awssso`
 - **処理アカウント数**: 利用可能な全アカウント（従来は5個固定）
 - **リージョン**: SSO設定から自動取得
 - **正規化方式**: `minimal`（スペース→アンダースコアのみ）
@@ -783,17 +783,17 @@ done
 ```ini
 # 複数の自動生成ブロック
 # AWS_SSO_CONFIG_GENERATOR START 2025/10/02 11:29:40
-[profile autogen-account1-123456789012:Role1]
+[profile awssso-account1-123456789012:Role1]
 ...
 # AWS_SSO_CONFIG_GENERATOR END 2025/10/02 11:29:41
 
 # AWS_SSO_CONFIG_GENERATOR START 2025/10/03 00:09:01  
-[profile autogen-account2-987654321098:Role2]
+[profile awssso-account2-987654321098:Role2]
 ...
 # AWS_SSO_CONFIG_GENERATOR END 2025/10/03 00:09:11
 
 # AWS_SSO_CONFIG_GENERATOR START 2025/10/03 00:16:29
-[profile autogen-account3-555666777888:Role3]
+[profile awssso-account3-555666777888:Role3]
 ...
 # AWS_SSO_CONFIG_GENERATOR END 2025/10/03 00:16:35
 ```

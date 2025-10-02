@@ -170,7 +170,7 @@ sso_registration_scopes = sso:account:access
 
 #### デフォルト設定（--force モード）
 
-- **プレフィックス**: `autogen`
+- **プレフィックス**: `awssso`
 - **処理アカウント数**: 利用可能な全アカウント
 - **リージョン**: SSO 設定から取得
 - **正規化方式**: `minimal`（スペース → アンダースコアのみ）
@@ -181,7 +181,7 @@ sso_registration_scopes = sso:account:access
 ```ini
 # AWS_SSO_CONFIG_GENERATOR START 2024/12/10 15:30:45
 
-[profile autogen-MyCompany-123456789012:PowerUserAccess]
+[profile awssso-MyCompany-123456789012:PowerUserAccess]
 sso_session = my-session
 sso_account_id = 123456789012
 sso_role_name = PowerUserAccess
@@ -318,7 +318,7 @@ sso_registration_scopes = sso:account:access
 ### 生成されるプロファイル例
 
 ```ini
-[profile autogen-Production-123456789012:AdministratorAccess]
+[profile awssso-Production-123456789012:AdministratorAccess]
 sso_session = my-session
 sso_account_id = 123456789012
 sso_role_name = AdministratorAccess
@@ -451,7 +451,7 @@ fi
 export AWS_PROFILE=$(aws configure list-profiles | grep -v "^$" | fzf --prompt="AWS Profile > ")
 
 # 自動生成プロファイルのみを選択
-export AWS_PROFILE=$(aws configure list-profiles | grep "^autogen-" | fzf --prompt="Auto-generated Profile > ")
+export AWS_PROFILE=$(aws configure list-profiles | grep "^awssso-" | fzf --prompt="Auto-generated Profile > ")
 
 # 特定のアカウントのプロファイルを選択
 export AWS_PROFILE=$(aws configure list-profiles | grep "123456789012" | fzf --prompt="Account 123456789012 > ")
@@ -473,7 +473,7 @@ aws_profile() {
 # 自動生成プロファイル専用の関数
 aws_autogen_profile() {
     local profile
-    profile=$(aws configure list-profiles | grep "^autogen-" | fzf --prompt="Auto-generated Profile > ")
+    profile=$(aws configure list-profiles | grep "^awssso-" | fzf --prompt="Auto-generated Profile > ")
     if [ -n "$profile" ]; then
         export AWS_PROFILE="$profile"
         echo "✅ AWS_PROFILE set to: $profile"

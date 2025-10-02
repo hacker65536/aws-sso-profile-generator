@@ -495,7 +495,7 @@ show_usage() {
     echo "  $0 --help           # ヘルプを表示"
     echo
     echo "デフォルト設定:"
-    echo "  プレフィックス: autogen"
+    echo "  プレフィックス: awssso"
     echo "  処理アカウント数: 利用可能な全アカウント"
     echo "  リージョン: SSO設定から取得"
     echo "  正規化方式: minimal（スペース→アンダースコアのみ）"
@@ -599,7 +599,7 @@ main() {
     log_info "プロファイル自動生成を開始します..."
     
     # デフォルト設定
-    local prefix="autogen"
+    local prefix="awssso"
     local region="$SSO_REGION"  # SSO設定から取得
     
     # ユーザー入力の取得
