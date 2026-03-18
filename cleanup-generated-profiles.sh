@@ -6,7 +6,7 @@
 set -e
 
 # 共通関数とカラー設定を読み込み
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/lib/common.sh"
 
 # 削除予定プロファイルの表示
 show_profiles_to_delete() {
