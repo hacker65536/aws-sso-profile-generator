@@ -263,25 +263,34 @@ analyze_profiles() {
     
     if [ "${manual_count:-0}" -gt 0 ]; then
         echo "✋ 手動管理プロファイル詳細:"
-        
+
         # 自動生成プロファイル以外の全プロファイルを取得
-        local temp_file
         local auto_profiles_file
-        temp_file=$(mktemp)
         auto_profiles_file=$(mktemp)
-        
-        # 自動生成プロファイル名を一時ファイルに保存
-        if [ -n "$auto_start_line" ] && [ -n "$auto_end_line" ]; then
-            safe_sed_range "$auto_start_line" "$auto_end_line" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' > "$auto_profiles_file"
+
+        # 自動生成プロファイル名を一時ファイルに保存（既に取得済みのブロック情報を使用）
+        if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
+            local ab_start_array
+            local ab_end_array
+            mapfile -t ab_start_array <<< "$start_lines"
+            mapfile -t ab_end_array <<< "$end_lines"
+            local ab_count=${#ab_start_array[@]}
+            for ((j=0; j<ab_count; j++)); do
+                local abs=${ab_start_array[j]}
+                local abe=${ab_end_array[j]}
+                if [ -n "$abs" ] && [ -n "$abe" ]; then
+                    safe_sed_range "$abs" "$abe" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' >> "$auto_profiles_file"
+                fi
+            done
         fi
-        
+
         # 手動管理プロファイルの最初の5個を表示
         echo "  プロファイル例（最初の5個）:"
-        
+
         # 全プロファイル名を取得
         local all_profiles
         all_profiles=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/')
-        
+
         # 手動管理プロファイル名を抽出（自動生成以外）
         echo "$all_profiles" | while IFS= read -r profile_name; do
             if ! grep -Fxq "$profile_name" "$auto_profiles_file" 2>/dev/null; then
@@ -290,12 +299,12 @@ analyze_profiles() {
         done | head -5 | while IFS= read -r profile; do
             echo "    - $profile"
         done
-        
+
         if [ $manual_count -gt 5 ]; then
             echo "    ... 他 $((manual_count - 5)) 個"
         fi
-        
-        rm -f "$temp_file" "$auto_profiles_file"
+
+        rm -f "$auto_profiles_file"
         echo
     fi
     
@@ -337,14 +346,7 @@ show_auto_generated_details() {
         mapfile -t end_array <<< "$end_lines"
         local start_count=${#start_array[@]}
         local end_count=${#end_array[@]}
-        
-        local start_array
-        local end_array
-        mapfile -t start_array <<< "$start_lines"
-        mapfile -t end_array <<< "$end_lines"
-        local start_count=${#start_array[@]}
-        local end_count=${#end_array[@]}
-        
+
         if [ "$start_count" -eq "$end_count" ] && [ "$start_count" -gt 0 ]; then
             log_success "自動生成プロファイルが見つかりました"
             echo
@@ -539,10 +541,14 @@ show_manual_profiles_details() {
             display_limit=300
         fi
         
-        local profile_names
-        profile_names=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/' | head -$display_limit)
-        
-        echo "$profile_names" | while IFS= read -r profile_name; do
+        local all_profile_names
+        all_profile_names=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/')
+
+        local write_count=0
+        while IFS= read -r profile_name; do
+            if [ "$write_count" -ge "$display_limit" ]; then
+                break
+            fi
             # 自動生成プロファイルでないかチェック
             if ! grep -Fxq "$profile_name" "$auto_profiles_file" 2>/dev/null; then
                 # プロファイルの詳細情報を取得
@@ -573,9 +579,10 @@ show_manual_profiles_details() {
                     region=$(echo "$profile_section" | grep "^region" | sed 's/region[[:space:]]*=[[:space:]]*//' || echo "-")
                     
                     echo "$profile_name ${sso_session:-"-"} ${account_id:-"-"} ${role_name:-"-"} ${region:-"-"}" >> "$temp_file"
+                    write_count=$((write_count + 1))
                 fi
             fi
-        done
+        done <<< "$all_profile_names"
         
         # 手動管理プロファイルの表示
         local displayed_count
@@ -728,7 +735,7 @@ show_usage() {
 # メイン実行
 main() {
     # ヘルプオプションの処理
-    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
         show_usage
         exit 0
     fi
@@ -744,10 +751,10 @@ main() {
     local show_all=false
     
     # --allオプションの確認
-    if [ "$2" = "--all" ]; then
+    if [ "${2:-}" = "--all" ]; then
         show_all=true
     fi
-    
+
     case "${1:-analyze}" in
         "analyze"|"")
             analyze_profiles "$config_file"
