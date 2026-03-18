@@ -44,6 +44,16 @@ log_debug() {
     fi
 }
 
+# ログファイル出力（カラーコードなし）
+LOG_FILE=""
+
+log_to_file() {
+    local message="$1"
+    if [ -n "${LOG_FILE:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $message" >> "$LOG_FILE"
+    fi
+}
+
 # 設定ファイルのパスを取得
 get_config_file() {
     if [ -n "$AWS_CONFIG_FILE" ]; then
@@ -546,38 +556,38 @@ get_access_token() {
     # SSO キャッシュディレクトリの存在確認
     if [ ! -d "$sso_cache_dir" ]; then
         log_error "SSO キャッシュディレクトリが見つかりません: $sso_cache_dir"
-        show_sso_login_command "$session_name"
+        show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
-    
+
     # SSO Start URLを含むJSONファイルを検索
     local cache_files
     cache_files=$(grep -l -r "$sso_start_url" "$sso_cache_dir" 2>/dev/null || true)
-    
+
     if [ -z "$cache_files" ]; then
         log_error "SSO セッションキャッシュが見つかりません"
-        show_sso_login_command "$session_name"
+        show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
-    
+
     # 複数ファイルがある場合は最新のファイルを取得
     local latest_file
     latest_file=$(echo "$cache_files" | xargs ls -t | head -n1)
-    
+
     log_info "SSO キャッシュファイル: $(basename "$latest_file")"
-    
+
     # jqでaccessTokenを取得
     if ! command -v jq &> /dev/null; then
         log_error "jq コマンドが見つかりません。jqをインストールしてください"
         return 1
     fi
-    
+
     local access_token
     access_token=$(jq -r '.accessToken // empty' "$latest_file" 2>/dev/null)
-    
+
     if [ -z "$access_token" ]; then
         log_error "アクセストークンが見つかりません"
-        show_sso_login_command "$session_name"
+        show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
     
@@ -617,7 +627,7 @@ get_access_token() {
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
             echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"
-            show_sso_login_command "$session_name"
+            show_sso_login_command "$SSO_SESSION_NAME"
             return 1
         else
             log_success "有効なアクセストークンを取得しました"
@@ -626,7 +636,7 @@ get_access_token() {
     else
         log_success "有効なアクセストークンを取得しました（有効期限情報なし）"
     fi
-    
+
     export ACCESS_TOKEN="$access_token"
     return 0
 }

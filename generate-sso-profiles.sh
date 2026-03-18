@@ -289,16 +289,16 @@ generate_profiles_for_accounts() {
                         profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
 
                         create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
-                        log_success "プロファイル作成: $profile_name"
+                        log_to_file "✅ プロファイル作成: $profile_name"
                         role_count=$((role_count + 1))
                         total_profiles=$((total_profiles + 1))
                     fi
                 done < "$temp_roles_file"
 
                 rm -f "$temp_roles_file"
-                log_debug "アカウント $account_name: $role_count 個のプロファイルを処理"
+                log_to_file "アカウント $account_name: $role_count 個のプロファイルを処理"
             else
-                log_debug "アカウント $account_name のロール取得に失敗しました"
+                log_to_file "⚠️ アカウント $account_name のロール取得に失敗しました"
             fi
 
             count=$((count + 1))
@@ -403,6 +403,11 @@ main() {
 
     # AWS_PROFILE環境変数のチェック
     check_and_handle_aws_profile
+
+    # ログファイルの初期化
+    LOG_FILE="${HOME}/.aws/sso-profile-generator-$(date +%Y%m%d_%H%M%S).log"
+    echo "# AWS SSO Profile Generator Log - $(get_current_datetime)" > "$LOG_FILE"
+    log_info "ログファイル: $LOG_FILE"
 
     # 設定ファイルの取得
     local config_file
@@ -528,6 +533,7 @@ main() {
         echo
         log_success "プロファイル自動生成が完了しました！"
         log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+        log_info "詳細ログ: $LOG_FILE"
     else
         read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
@@ -535,6 +541,7 @@ main() {
             echo
             log_success "プロファイル自動生成が完了しました！"
             log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+            log_info "詳細ログ: $LOG_FILE"
         else
             log_info "プロファイル生成をキャンセルしました"
         fi
