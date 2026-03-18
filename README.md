@@ -71,7 +71,7 @@ sso_registration_scopes = sso:account:access
 1. **環境チェックの実行**
 
    ```bash
-   ./check-environment.sh
+   ./check.sh
    ```
 
 2. **SSO ログイン**
@@ -91,22 +91,19 @@ sso_registration_scopes = sso:account:access
 
 ## スクリプト構成
 
-### メインスクリプト
+### ユーザー向けスクリプト
 
-- **`check-environment.sh`** - 全ステップを順次実行する環境チェックスクリプト
-
-### 個別機能スクリプト
-
-- **`check-tools.sh`** - 必要ツールの存在・バージョン確認
-- **`check-aws-config.sh`** - AWS 設定ファイルとリージョン設定の確認
-- **`check-sso-config.sh`** - SSO 設定とセッション状態の確認
-- **`check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示・重複チェック
+- **`check.sh`** - 環境チェックの統合エントリーポイント（サブコマンド形式）
 - **`generate-sso-profiles.sh`** - SSO プロファイルの自動一括生成
 - **`cleanup-generated-profiles.sh`** - 自動生成プロファイルの削除
 
-### 共通ライブラリ
+### 内部スクリプト（`lib/`）
 
-- **`common.sh`** - ESC シーケンス定義、カラー定義、ログ関数、スピナー表示、共通ユーティリティ関数
+- **`lib/check-tools.sh`** - 必要ツールの存在・バージョン確認
+- **`lib/check-aws-config.sh`** - AWS 設定ファイルとリージョン設定の確認
+- **`lib/check-sso-config.sh`** - SSO 設定とセッション状態の確認
+- **`lib/check-sso-profiles.sh`** - SSO プロファイルの分析・一覧表示・重複チェック
+- **`lib/common.sh`** - ESC シーケンス定義、カラー定義、ログ関数、スピナー表示、共通ユーティリティ関数
 
 ### テスト環境
 
@@ -121,38 +118,41 @@ sso_registration_scopes = sso:account:access
 ### 1. 環境確認
 
 ```bash
-# 必要ツールの確認
-./check-tools.sh
+# 全ての環境チェック（一括実行）
+./check.sh
 
-# AWS設定ファイルとリージョン設定の確認
-./check-aws-config.sh
+# 必要ツールの確認のみ
+./check.sh tools
 
-# SSO設定の確認
-./check-sso-config.sh
+# AWS設定ファイルとリージョン設定の確認のみ
+./check.sh aws-config
+
+# SSO設定の確認のみ
+./check.sh sso-config
 ```
 
 ### 2. プロファイル分析
 
 ```bash
 # 全プロファイルの分析（重複チェック含む）
-./check-sso-profiles.sh
-./check-sso-profiles.sh analyze
+./check.sh sso-profiles
+./check.sh sso-profiles analyze
 
 # 自動生成プロファイルの詳細表示
-./check-sso-profiles.sh auto
+./check.sh sso-profiles auto
 
 # 手動管理プロファイルの詳細表示
-./check-sso-profiles.sh manual
+./check.sh sso-profiles manual
 
 # 重複プロファイルの詳細チェック
-./check-sso-profiles.sh duplicates
+./check.sh sso-profiles duplicates
 
 # 全件表示（最大300件）
-./check-sso-profiles.sh auto --all
-./check-sso-profiles.sh manual --all
+./check.sh sso-profiles auto --all
+./check.sh sso-profiles manual --all
 
 # ヘルプ表示
-./check-sso-profiles.sh --help
+./check.sh help
 ```
 
 ### 3. プロファイル自動生成
@@ -224,7 +224,7 @@ aws configure set region ap-northeast-1
 
 ```bash
 # リージョン設定の詳細確認
-./check-aws-config.sh
+./check.sh aws-config
 
 # 現在の設定確認
 aws configure get region
@@ -259,13 +259,10 @@ full:     'my_perfect_web_service_prod'
 
 ```bash
 # 全セッション表示、最初のセッション使用
-./check-sso-config.sh
+./check.sh sso-config
 
 # 特定セッション確認
-./check-sso-config.sh my-session
-
-# ヘルプ表示
-./check-sso-config.sh --help
+./check.sh sso-config my-session
 ```
 
 ### プロファイル品質チェック
@@ -278,7 +275,7 @@ full:     'my_perfect_web_service_prod'
 
 ```bash
 # 重複プロファイルの詳細チェック
-./check-sso-profiles.sh duplicates
+./check.sh sso-profiles duplicates
 ```
 
 #### 表示例
@@ -368,7 +365,7 @@ cli_pager =
 
    ```bash
    # 重複プロファイルの詳細確認
-   ./check-sso-profiles.sh duplicates
+   ./check.sh sso-profiles duplicates
 
    # 設定ファイルを手動で編集して重複を削除
    # または自動生成プロファイルの場合は再生成
@@ -395,7 +392,7 @@ cli_pager =
 
 ```bash
 # 各スクリプトの冒頭で読み込み
-source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/lib/common.sh"
 
 # ログ関数の使用
 log_info "情報メッセージ"
@@ -541,6 +538,11 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+- **v1.12.0** - ディレクトリ構造のリファクタリング
+  - 内部スクリプトを `lib/` ディレクトリに集約
+  - `check-environment.sh` を `check.sh` に統合・リネーム（サブコマンド形式）
+  - `check.sh tools / aws-config / sso-config / sso-profiles` のサブコマンド対応
+  - ルート直下はユーザーが直接実行するスクリプトのみに整理
 - **v1.10.0** - ユーザビリティ向上とプレフィックス変更
   - デフォルトプレフィックス `autogen` → `awssso` に変更
   - クイックスタートに前提条件セクション追加

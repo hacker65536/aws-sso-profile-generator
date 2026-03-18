@@ -3,7 +3,7 @@
 # スピナー関数のテストスクリプト
 
 # 共通関数を読み込み
-source "$(dirname "$0")/../common.sh"
+source "$(dirname "$0")/../lib/common.sh"
 
 echo "🧪 スピナー関数のテスト開始"
 echo "=========================="
