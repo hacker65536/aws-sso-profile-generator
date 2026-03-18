@@ -136,6 +136,7 @@ sso_registration_scopes = sso:account:access
 ```bash
 # 全プロファイルの分析（重複チェック含む）
 ./check-sso-profiles.sh
+./check-sso-profiles.sh analyze
 
 # 自動生成プロファイルの詳細表示
 ./check-sso-profiles.sh auto
@@ -148,6 +149,10 @@ sso_registration_scopes = sso:account:access
 
 # 全件表示（最大300件）
 ./check-sso-profiles.sh auto --all
+./check-sso-profiles.sh manual --all
+
+# ヘルプ表示
+./check-sso-profiles.sh --help
 ```
 
 ### 3. プロファイル自動生成
@@ -174,7 +179,7 @@ sso_registration_scopes = sso:account:access
 - **処理アカウント数**: 利用可能な全アカウント
 - **リージョン**: SSO 設定から取得
 - **正規化方式**: `minimal`（スペース → アンダースコアのみ）
-- **重複処理**: 自動上書き
+- **既存ブロック**: 実行前に自動削除してから再生成
 
 生成されるプロファイル形式：
 
@@ -258,6 +263,9 @@ full:     'my_perfect_web_service_prod'
 
 # 特定セッション確認
 ./check-sso-config.sh my-session
+
+# ヘルプ表示
+./check-sso-config.sh --help
 ```
 
 ### プロファイル品質チェック

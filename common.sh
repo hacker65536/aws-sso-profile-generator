@@ -133,21 +133,14 @@ show_profile_stats() {
     sso_profiles=$(grep -c "sso_session" "$config_file" 2>/dev/null || echo "0")
     total_sso_sessions=$(grep -c "^\[sso-session " "$config_file" 2>/dev/null || echo "0")
     
-    # 管理対象プロファイルの取得
-    local managed_profiles
-    managed_profiles=$(grep "# AWS SSO CONFIG.*START" "$config_file" 2>/dev/null | grep -v "AWS_SSO_CONFIG_GENERATOR" || true)
-    
-    if [ -n "$managed_profiles" ]; then
-        managed_count=$(echo "$managed_profiles" | wc -l | tr -d ' ')
-    else
-        managed_count=0
-    fi
-    
+    # 自動生成プロファイル数の取得
+    managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || echo "0")
+
     log_info "プロファイル統計:"
     echo "  総プロファイル数: $total_profiles"
     echo "  SSOプロファイル数: $sso_profiles"
     echo "  SSO セッション数: $total_sso_sessions"
-    echo "  管理対象プロファイル数: $managed_count"
+    echo "  自動生成プロファイル数: $managed_count"
 }
 
 # 詳細なプロファイルサマリーの表示
@@ -171,21 +164,18 @@ show_detailed_profile_summary() {
     local sso_sessions
     sso_sessions=$(grep -n "^\[sso-session " "$config_file" 2>/dev/null | head -5 || true)
     
-    # 管理対象プロファイルの取得（自動生成を除外）
-    local managed_profiles
-    managed_profiles=$(grep "# AWS SSO CONFIG.*START" "$config_file" 2>/dev/null | grep -v "AWS_SSO_CONFIG_GENERATOR" || true)
-    
-    if [ -n "$managed_profiles" ]; then
-        managed_count=$(echo "$managed_profiles" | wc -l | tr -d ' ')
-    else
-        managed_count=0
-    fi
-    
+    # 自動生成プロファイル数の取得
+    managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || echo "0")
+
+    # 自動生成ブロックのタイムスタンプ取得
+    local gen_timestamps
+    gen_timestamps=$(grep "^# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | sed 's/^# AWS_SSO_CONFIG_GENERATOR START //' || true)
+
     echo "設定サマリー:"
     echo "  SSO セッション数: $total_sso_sessions"
     echo "  プロファイル数: $total_profiles"
-    echo "  管理対象プロファイル数: $managed_count"
-    
+    echo "  自動生成プロファイル数: $managed_count"
+
     # SSO セッション一覧の表示
     if [ "$total_sso_sessions" -gt 0 ]; then
         echo
@@ -199,19 +189,16 @@ show_detailed_profile_summary() {
             fi
         done <<< "$sso_sessions"
     fi
-    
-    # 管理対象プロファイル一覧の表示
-    if [ "$managed_count" -gt 0 ]; then
+
+    # 自動生成プロファイルの生成日時一覧の表示
+    if [ "$managed_count" -gt 0 ] && [ -n "$gen_timestamps" ]; then
         echo
-        echo "管理対象プロファイル:"
-        while IFS= read -r line; do
-            if [ -n "$line" ]; then
-                local customization_name
-                customization_name=${line#*# AWS SSO CONFIG }
-                customization_name=${customization_name% START*}
-                echo "  - $customization_name"
+        echo "自動生成プロファイル (生成日時):"
+        while IFS= read -r ts; do
+            if [ -n "$ts" ]; then
+                echo "  - $ts"
             fi
-        done <<< "$managed_profiles"
+        done <<< "$gen_timestamps"
     fi
 }
 
@@ -234,16 +221,9 @@ get_profile_stats_data() {
     sso_profiles=$(grep -c "sso_session" "$config_file" 2>/dev/null || echo "0")
     total_sso_sessions=$(grep -c "^\[sso-session " "$config_file" 2>/dev/null || echo "0")
     
-    # 管理対象プロファイルの取得
-    local managed_profiles
-    managed_profiles=$(grep "# AWS SSO CONFIG.*START" "$config_file" 2>/dev/null | grep -v "AWS_SSO_CONFIG_GENERATOR" || true)
-    
-    if [ -n "$managed_profiles" ]; then
-        managed_count=$(echo "$managed_profiles" | wc -l | tr -d ' ')
-    else
-        managed_count=0
-    fi
-    
+    # 自動生成プロファイル数の取得
+    managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || echo "0")
+
     echo "$total_profiles $sso_profiles $total_sso_sessions $managed_count"
 }
 
@@ -306,17 +286,17 @@ show_profile_diff() {
         echo "  SSO セッション数: $after_sessions (変更なし)"
     fi
     
-    # 管理対象プロファイル数
+    # 自動生成プロファイル数
     if [ "$diff_managed" -ne 0 ]; then
-        echo "- 管理対象プロファイル数: $before_managed"
-        echo "+ 管理対象プロファイル数: $after_managed"
+        echo "- 自動生成プロファイル数: $before_managed"
+        echo "+ 自動生成プロファイル数: $after_managed"
         if [ "$diff_managed" -lt 0 ]; then
             echo "  (${diff_managed#-} 個削除)"
         else
             echo "  (+$diff_managed 個追加)"
         fi
     else
-        echo "  管理対象プロファイル数: $after_managed (変更なし)"
+        echo "  自動生成プロファイル数: $after_managed (変更なし)"
     fi
     
     # サマリー
@@ -465,7 +445,7 @@ show_progress_complete() {
 # SSO設定情報の取得
 get_sso_config() {
     local config_file="$1"
-    local selected_session="$2"  # オプション: 特定のセッション名を指定
+    local selected_session="${2:-}"  # オプション: 特定のセッション名を指定
     
     if [ ! -f "$config_file" ]; then
         log_error "AWS設定ファイルが見つかりません: $config_file"

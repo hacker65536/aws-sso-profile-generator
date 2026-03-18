@@ -181,12 +181,16 @@ check_sso_config() {
 show_usage() {
     echo "使用方法: $0 [SESSION_NAME]"
     echo
+    echo "引数:"
+    echo "  SESSION_NAME          確認する特定のSSO Session名（省略時は全セッション表示）"
+    echo
     echo "オプション:"
-    echo "  SESSION_NAME    確認する特定のSSO Session名"
+    echo "  -h, --help            このヘルプを表示"
     echo
     echo "例:"
     echo "  $0                    # 全てのセッションを表示し、最初のものを使用"
     echo "  $0 my-session         # 'my-session' セッションを確認"
+    echo "  $0 --help             # ヘルプを表示"
 }
 
 # 特定のセッションをチェックする関数
