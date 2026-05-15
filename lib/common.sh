@@ -56,7 +56,7 @@ log_to_file() {
 
 # 設定ファイルのパスを取得
 get_config_file() {
-    if [ -n "$AWS_CONFIG_FILE" ]; then
+    if [ -n "${AWS_CONFIG_FILE:-}" ]; then
         echo "$AWS_CONFIG_FILE"
     else
         echo "$HOME/.aws/config"
@@ -167,15 +167,18 @@ show_detailed_profile_summary() {
     local managed_count
     
     # 基本統計の取得
-    total_profiles=$(grep -c "^\[profile " "$config_file" 2>/dev/null || echo "0")
-    total_sso_sessions=$(grep -c "^\[sso-session " "$config_file" 2>/dev/null || echo "0")
-    
+    total_profiles=$(grep -c "^\[profile " "$config_file" 2>/dev/null || true)
+    total_profiles=${total_profiles:-0}
+    total_sso_sessions=$(grep -c "^\[sso-session " "$config_file" 2>/dev/null || true)
+    total_sso_sessions=${total_sso_sessions:-0}
+
     # SSO セッション情報の取得
     local sso_sessions
     sso_sessions=$(grep -n "^\[sso-session " "$config_file" 2>/dev/null | head -5 || true)
-    
+
     # 自動生成プロファイル数の取得
-    managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || echo "0")
+    managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || true)
+    managed_count=${managed_count:-0}
 
     # 自動生成ブロックのタイムスタンプ取得
     local gen_timestamps
@@ -327,16 +330,16 @@ show_spinner() {
     local i=0
     local spin='⠧⠏⠛⠹⠼⠶'
     local n=${#spin}
-    
+
+    printf "%s" "$HIDE_CURSOR"
     while kill -0 "$pid" 2>/dev/null; do
-        sleep 0.1
-        printf "%s" "$ERASE_LINE"
+        printf "\r%s" "$ERASE_LINE"
         printf "%s %s" "${GREEN}${spin:i++%n:1}${RESET}" "$message"
-        printf "%s\r" "$HIDE_CURSOR"
+        sleep 0.1
     done
-    
+
     # スピナーをクリアしてカーソルを表示
-    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
+    printf "\r%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 
 # バックグラウンド実行でスピナー付きコマンド実行
@@ -369,16 +372,16 @@ show_spinner_for_seconds() {
     local count=0
     local max_count=$((seconds * 10))
     
+    printf "%s" "$HIDE_CURSOR"
     while [ $count -lt $max_count ]; do
-        sleep 0.1
-        printf "%s" "$ERASE_LINE"
+        printf "\r%s" "$ERASE_LINE"
         printf "%s %s" "${GREEN}${spin:i++%n:1}${RESET}" "$message"
-        printf "%s\r" "$HIDE_CURSOR"
+        sleep 0.1
         count=$((count + 1))
     done
-    
+
     # スピナーをクリアしてカーソルを表示
-    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
+    printf "\r%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 
 # プログレスバー風スピナー
@@ -389,15 +392,15 @@ show_progress_spinner() {
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local n=${#spin}
     
+    printf "%s" "$HIDE_CURSOR"
     while kill -0 "$pid" 2>/dev/null; do
-        sleep 0.2
-        printf "%s" "$ERASE_LINE"
+        printf "\r%s" "$ERASE_LINE"
         printf "%s %s" "${BLUE}${spin:i++%n:1}${RESET}" "$message"
-        printf "%s\r" "$HIDE_CURSOR"
+        sleep 0.2
     done
-    
+
     # スピナーをクリアしてカーソルを表示
-    printf "%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
+    printf "\r%s%s" "$ERASE_LINE" "$SHOW_CURSOR"
 }
 
 # プログレス表示付きスピナー
@@ -428,7 +431,7 @@ show_progress_with_counter() {
         fi
     done
     
-    printf "%s" "$ERASE_LINE"
+    printf "\r%s" "$ERASE_LINE"
     printf "%s [%s] %d/%d (%d%%) %s" \
         "${GREEN}${spin:i++%n:1}${RESET}" \
         "$progress_bar" \
@@ -436,7 +439,6 @@ show_progress_with_counter() {
         "$total" \
         "$percentage" \
         "$message"
-    printf "%s\r" "$HIDE_CURSOR"
 }
 
 # プログレス完了表示
