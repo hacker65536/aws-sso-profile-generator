@@ -175,6 +175,8 @@ sso_registration_scopes = sso:account:access
 - `--refresh-cache`: 既存キャッシュを削除してから API を再取得
 - `--parallel N`: ロール取得の並列度を指定（既定 8、または環境変数 `PARALLEL`）
 - `--dry-run`: 設定ファイルを変更せず、生成予定のプロファイルを表示するだけ
+- `--account-filter PATTERN`: アカウント名を glob で絞り込み（例: `'prod-*'`）
+- `--role-filter PATTERN`: ロール名を glob で絞り込み（例: `'AWSReadOnly*'`）
 
 #### デフォルト設定（--force モード）
 
@@ -306,6 +308,58 @@ full:     'my_perfect_web_service_prod'
 - 設定ファイルの自動バックアップ作成
 - セッション期限切れの自動検出
 - 削除前のユーザー確認プロセス
+
+### 処理フロー
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                generate-sso-profiles.sh の処理フロー                 │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  [起動]                                                             │
+│    │                                                                │
+│    ├─ flock 取得 (~/.aws/.aws-sso-pg.lock)                          │
+│    ├─ SSO 設定読込 (~/.aws/config)                                  │
+│    └─ アクセストークン取得 (~/.aws/sso/cache/*.json)                │
+│    │                                                                │
+│  [Phase 1]  list-accounts (キャッシュ経由)                          │
+│    │  ├─ TTL 内ならローカル read のみ                               │
+│    │  └─ TTL 切れなら AWS API → cache 書込                          │
+│    │  --account-filter で絞り込み                                   │
+│    ▼                                                                │
+│  [Phase 2]  list-account-roles × N                                  │
+│    │  ┌──────────────────────────────────────────────────────────┐ │
+│    │  │ Pre-flight: batch stat で hit / miss 分類                │ │
+│    │  └──────────────────────────────────────────────────────────┘ │
+│    │     │                              │                          │
+│    │  キャッシュヒット                  キャッシュ未ヒット          │
+│    │     │                              │                          │
+│    │  軽量 bash -c × N (並列)        worker (lib/fetch-account-    │
+│    │  ├─ cat cache + jq               roles.sh) × N (並列)        │
+│    │  └─ .roles 出力                 ├─ AWS API 呼び出し         │
+│    │                                 ├─ cache 書込                │
+│    │                                 └─ .roles 出力                │
+│    │     │                              │                          │
+│    │     └──────────────┬───────────────┘                          │
+│    │                    ▼                                          │
+│    │           tmpdir/<id>.roles ファイル群                         │
+│    ▼                                                                │
+│  [Phase 3]  設定ファイル書き込み (直列)                              │
+│    │  ├─ backup → rotate_backups                                    │
+│    │  ├─ verify_marker_integrity → remove_generated_blocks          │
+│    │  ├─ trim_trailing_empty_lines                                  │
+│    │  ├─ START マーカー追加                                         │
+│    │  ├─ for each account → for each role:                          │
+│    │  │     ├─ --role-filter チェック                               │
+│    │  │     └─ printf >> $config_file                               │
+│    │  └─ END マーカー追加                                           │
+│    ▼                                                                │
+│  [Diff 表示] before/after で集合差分 (+追加 / -削除 / =変更なし)    │
+│  [TIMING ログ] Phase 別 + TOTAL 所要時間                            │
+│  [release_lock]                                                     │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ### キャッシュ機能
 
@@ -585,77 +639,22 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+直近のハイライトのみ抜粋。完全な履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
+
+- **v1.20.0** - UX 大量改善・コード品質向上・並行実行ガード
+  - `--account-filter` / `--role-filter` フラグでアカウント/ロール絞り込み
+  - `cleanup --session NAME` で特定セッションのみ削除
+  - `check.sh cache` サブコマンド (`stats` / `clear` / `validate`)
+  - 並行実行ガード (mkdir advisory lock、stale lock 自動回収)
+  - Ctrl+C のクリーンハンドリング
+  - Bash/Zsh シェル補完 (`completions/`)
+  - 純関数 unit テスト (`test/test_units.sh`、20 アサーション)
+  - SSO 期限切れエラーを actionable に
+  - **空行累積バグ修正** (再生成のたびに空行が増える問題)
 - **v1.19.0** - UX 改善: `--dry-run` / Diff 表示 / ログローテーション
-  - `--dry-run` フラグ: 設定ファイルを変更せず、生成予定のプロファイルだけ表示
-    (generate-sso-profiles.sh と cleanup-generated-profiles.sh 両方)
-  - 再生成時の Diff 表示: 「+ N 件追加 / - N 件削除 / = N 件変更なし」
-    (前回の自動生成ブロックと今回を `extract_auto_profiles` で比較)
-  - 実行ログのローテーション: `~/.aws/sso-profile-generator-*.log` を最新 30 件保持
-    (環境変数 `LOG_KEEP_COUNT` で上書き可能)
-  - 共通関数を整理: `rotate_files_by_pattern` 新設、`rotate_backups` はラッパー化
-  - E2E テストを 11 → 15 アサーションに拡張 (dry-run の md5 不変、diff "変更なし"検証等)
-- **v1.18.0** - Phase 2 大幅高速化 + フェーズ別 timing + portability 改善
-  - **キャッシュヒット時の Phase 2 を 10x 高速化** (warm cache 18.5s → 2.4s)
-    - Pre-flight 分類を単一 batch stat 化 (`is_cache_valid × 187` → 1 stat call)
-    - キャッシュヒットは worker spawn せず軽量 `bash -c` で並列処理 (source common.sh 不要)
-  - **フェーズ別 timing 計測を追加** (`[TIMING] Phase 1/2/3/TOTAL` ログ + 終了時サマリ表示)
-    - bash 5+ の `EPOCHREALTIME` 活用、`perf_now` / `perf_diff` ヘルパー
-  - **portability 改善**: BSD/GNU date の 3 分岐を統合、bash 内蔵 `printf %()T` で外部依存最小化
-    - `parse_utc_to_epoch` 共通関数化、BSD `date -j -f` の `TZ=UTC` バグも修正
-    - `is_gnu_date` 削除（不要に）
-  - 実機 187 アカウント / 596 profiles でベンチマーク取得 (詳細は機能詳細セクション)
+- **v1.18.0** - Phase 2 大幅高速化 (warm cache 7.5x) + フェーズ別 timing + portability 改善
 - **v1.17.0** - パフォーマンスチューニング (subshell 削減)
-  - `log_to_file` の `$(date ...)` を bash 内蔵 `printf %()T` に置換 (約 12x 高速)
-  - `normalize_account_name_full/minimal` の `echo | sed | sed` を pure bash パラメータ展開に置換
-  - `create_profile_config` の `$(cat << EOF ...)` を単一 `printf` に置換
-  - Phase 3 ループの `echo "$line" | grep -o` を `${line%% *}` + 正規表現マッチに置換
-  - 8 アカウント E2E ベンチマーク: ~13.7s → ~8-9s (約 36% 短縮)
-  - 各個別フェーズで 2-4 倍高速化
 - **v1.16.0** - キャッシュ機構と並列処理の実装
-  - `lib/common.sh` にキャッシュ層 (`get_cached_accounts` / `get_cached_roles` 等) を実装
-  - `list-account-roles` を `xargs -P` でアカウント単位に並列化 (`lib/fetch-account-roles.sh`)
-  - `--refresh-cache` / `--parallel N` フラグを `generate-sso-profiles.sh` に追加
-  - 200 アカウント環境で初回 200s → 25s、2 回目以降 2s に短縮
-  - `test/test-cache.sh` が動作可能になり、架空ドキュメント状態を解消
 - **v1.15.0** - 事故防止のための安全対策強化とリポジトリ整理
-  - 全スクリプトに `set -euo pipefail` を統一
-  - START/END マーカー整合性チェックを追加
-  - バックアップ 10 世代ローテーション
-  - shellcheck GitHub Actions ワークフロー追加
-  - 未追跡ファイル整理 (`.aws-sso-cache/` を `.gitignore` に追加等)
-- **v1.14.0** - バグ修正: unbound variable・grep -c 二重出力・スピナー描画順序
-- **v1.12.0** - ディレクトリ構造のリファクタリング
-  - 内部スクリプトを `lib/` ディレクトリに集約
-  - `check-environment.sh` を `check.sh` に統合・リネーム（サブコマンド形式）
-  - `check.sh tools / aws-config / sso-config / sso-profiles` のサブコマンド対応
-  - ルート直下はユーザーが直接実行するスクリプトのみに整理
-- **v1.10.0** - ユーザビリティ向上とプレフィックス変更
-  - デフォルトプレフィックス `autogen` → `awssso` に変更
-  - クイックスタートに前提条件セクション追加
-  - `setup-aws-sso.sh` → `check-environment.sh` にリネーム
-  - 「セットアップ」から「環境チェック」への表現統一
-  - AWS 設定ファイルの完全な例を追加
-- **v1.9.2** - コマンドラインオプションとデフォルト動作の改善
-  - `--help`/`-h` オプション追加（詳細なヘルプ表示）
-  - `--force`/`-f` オプション追加（デフォルト値で自動実行）
-  - デフォルト処理アカウント数を全アカウントに変更
-  - 自動化・CI/CD 対応の強化
-- **v1.9.1** - プログレス表示形式の改善
-- **v1.9** - プログレス表示機能と複数ブロック対応
-  - プロファイル生成時のプログレス表示機能追加
-  - 重複チェック処理のプログレス表示対応
-  - 複数自動生成ブロック対応（分析機能修正）
-  - ユーザー体験の大幅改善
-- **v1.8** - コード品質向上とテスト環境整備
-  - shellcheck 完全対応（全警告解決）
-  - スピナー関数の改良（Unicode スピナー、ESC シーケンス統一）
-  - テストディレクトリ作成（test/）
-  - 開発・デバッグ用テストスクリプト追加
-- **v1.7** - プロファイル品質チェック機能追加
-- **v1.6** - リージョン設定確認機能強化
-- **v1.5** - ツール名変更とブランディング統一
-- **v1.4** - プロファイル分析機能追加
-- **v1.3** - 複数 SSO Session 対応
-- **v1.2** - 管理機能強化
-- **v1.1** - 自動生成機能追加
-- **v1.0** - 基本機能実装
+
+[全バージョンの詳細 →](CHANGELOG.md)

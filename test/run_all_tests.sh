@@ -43,6 +43,7 @@ run_test() {
 run_test "test_colors.sh" "カラー表示テスト"
 run_test "test_common.sh" "共通関数テスト"
 run_test "test_spinner.sh" "スピナー関数テスト"
+run_test "test_units.sh"  "純関数の単体テスト"
 run_test "test-e2e.sh"    "E2E (mock aws によるフルパイプライン検証)"
 
 # 結果サマリー
