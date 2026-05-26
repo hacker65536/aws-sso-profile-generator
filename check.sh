@@ -3,7 +3,7 @@
 # AWS SSO Profile Generator - 環境チェックスクリプト
 # サブコマンドで各チェックを個別または一括実行できます
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

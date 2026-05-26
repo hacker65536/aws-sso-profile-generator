@@ -3,7 +3,7 @@
 # ツール存在・バージョン確認スクリプト
 # jq と aws コマンドの存在とバージョンをチェックします
 
-set -e
+set -euo pipefail
 
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/common.sh"

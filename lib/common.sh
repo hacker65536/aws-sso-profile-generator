@@ -63,6 +63,53 @@ get_config_file() {
     fi
 }
 
+# AWS_SSO_CONFIG_GENERATOR ブロックの START/END マーカー整合性チェック
+# 不一致の場合は非ゼロを返し、stderr にエラー詳細を出力する
+verify_marker_integrity() {
+    local config_file="$1"
+
+    if [ ! -f "$config_file" ]; then
+        return 0
+    fi
+
+    local starts ends
+    # grep -c は 0件のとき exit 1 を返すが、stdout に "0" を出力する
+    # || true で exit 1 を吸収し、出力は "0" のまま残す（"0\n0" の重複出力を避ける）
+    starts=$(grep -c '^# AWS_SSO_CONFIG_GENERATOR START' "$config_file" 2>/dev/null || true)
+    ends=$(grep -c '^# AWS_SSO_CONFIG_GENERATOR END' "$config_file" 2>/dev/null || true)
+    starts=${starts:-0}
+    ends=${ends:-0}
+
+    if [ "$starts" != "$ends" ]; then
+        log_error "AWS_SSO_CONFIG_GENERATOR マーカーが不整合です"
+        log_error "  START: $starts 個 / END: $ends 個"
+        log_error "  対象ファイル: $config_file"
+        log_error "  自動削除を中止しました。手動で確認してください。"
+        return 1
+    fi
+    return 0
+}
+
+# 古いバックアップを最新 N 世代に絞る
+# 引数: $1=設定ファイルパス, $2=保持世代数(省略時10)
+rotate_backups() {
+    local config_file="$1"
+    local keep="${2:-10}"
+
+    local removed
+    # シェルグロブを使わず ls -t ベースで安全に列挙
+    # shellcheck disable=SC2012
+    removed=$(ls -t "${config_file}".backup.* 2>/dev/null | tail -n +"$((keep + 1))" || true)
+    if [ -n "$removed" ]; then
+        echo "$removed" | while IFS= read -r f; do
+            [ -n "$f" ] && rm -f -- "$f"
+        done
+        local removed_count
+        removed_count=$(echo "$removed" | grep -c . || true)
+        log_info "古いバックアップを ${removed_count} 個削除しました (保持: ${keep} 世代)"
+    fi
+}
+
 # 現在の日付と時間を取得
 get_current_datetime() {
     date '+%Y/%m/%d %H:%M:%S'

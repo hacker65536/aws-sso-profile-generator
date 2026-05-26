@@ -2,7 +2,7 @@
 
 # AWS 設定ファイル確認スクリプト
 
-set -e
+set -euo pipefail
 
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/common.sh"
@@ -87,10 +87,10 @@ check_region_config() {
         echo
         echo "✅ AWS SSO コマンドで使用されるリージョン:"
         local effective_region
-        if [ -n "$AWS_REGION" ]; then
+        if [ -n "${AWS_REGION:-}" ]; then
             effective_region="$AWS_REGION (環境変数 AWS_REGION)"
             log_success "環境変数によりリージョンが設定されています"
-        elif [ -n "$AWS_DEFAULT_REGION" ]; then
+        elif [ -n "${AWS_DEFAULT_REGION:-}" ]; then
             effective_region="$AWS_DEFAULT_REGION (環境変数 AWS_DEFAULT_REGION)"
             log_success "環境変数によりリージョンが設定されています"
         elif [ "$cli_region" != "未設定" ]; then
@@ -153,7 +153,7 @@ main() {
     log_info "AWS_CONFIG_FILE 環境変数の確認中..."
     
     local config_file
-    if [ -n "$AWS_CONFIG_FILE" ]; then
+    if [ -n "${AWS_CONFIG_FILE:-}" ]; then
         log_success "AWS_CONFIG_FILE が設定されています: $AWS_CONFIG_FILE"
         config_file="$AWS_CONFIG_FILE"
     else

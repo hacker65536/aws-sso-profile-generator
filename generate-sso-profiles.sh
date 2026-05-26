@@ -202,6 +202,10 @@ remove_generated_blocks() {
     local config_file="$1"
 
     if grep -q "^# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null; then
+        # マーカー整合性チェック（不一致なら sed による事故的全削除を防ぐ）
+        if ! verify_marker_integrity "$config_file"; then
+            return 1
+        fi
         log_info "既存の自動生成ブロックを削除中..."
         sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
         rm -f "${config_file}.tmp"
@@ -238,10 +242,15 @@ generate_profiles_for_accounts() {
         backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
         cp "$config_file" "$backup_file"
         log_info "設定ファイルをバックアップしました: $backup_file"
+        # 古いバックアップを最新 10 世代に絞る
+        rotate_backups "$config_file" 10
     fi
 
     # 既存の自動生成ブロックをすべて削除してからクリーンな状態で再生成
-    remove_generated_blocks "$config_file"
+    if ! remove_generated_blocks "$config_file"; then
+        log_error "既存ブロックの削除に失敗したため生成処理を中止します"
+        return 1
+    fi
 
     # 一括処理開始コメントを追加
     add_batch_start_comment "$config_file"

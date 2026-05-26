@@ -3,7 +3,7 @@
 # AWS SSO プロファイル分析スクリプト
 # 自動生成プロファイルと手動プロファイルの分析・一覧表示を行います
 
-set -e
+set -euo pipefail
 
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/common.sh"

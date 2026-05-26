@@ -23,7 +23,7 @@ echo
 echo "テスト2: 設定ファイルパス取得"
 config_file=$(get_config_file)
 echo "デフォルト設定ファイル: $config_file"
-AWS_CONFIG_FILE="/tmp/test_config" get_config_file_result=$(AWS_CONFIG_FILE="/tmp/test_config" get_config_file)
+get_config_file_result=$(AWS_CONFIG_FILE="/tmp/test_config" get_config_file)
 echo "カスタム設定ファイル: $get_config_file_result"
 echo "✅ テスト2完了"
 echo

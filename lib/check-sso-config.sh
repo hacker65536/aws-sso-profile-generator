@@ -2,7 +2,7 @@
 
 # AWS SSO 設定確認スクリプト
 
-set -e
+set -euo pipefail
 
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/common.sh"
@@ -28,7 +28,8 @@ show_all_sso_sessions() {
     local sso_start_url=""
     
     # 一時ファイルを使用してセッション情報を保存
-    local temp_file=$(mktemp)
+    local temp_file
+    temp_file=$(mktemp)
     
     while IFS= read -r line; do
         if [[ $line =~ ^\[sso-session[[:space:]]*([^]]+)\] ]]; then
@@ -232,17 +233,17 @@ check_specific_sso_session() {
 # メイン実行
 main() {
     # ヘルプオプションの処理
-    if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
         show_usage
         exit 0
     fi
-    
+
     echo "🔍 AWS SSO 設定確認"
     echo "==================="
     echo
-    
+
     local result
-    if [ -n "$1" ]; then
+    if [ -n "${1:-}" ]; then
         # 特定のセッションを確認
         check_specific_sso_session "$1"
         result=$?

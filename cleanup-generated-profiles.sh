@@ -3,7 +3,7 @@
 # AWS SSO 自動生成プロファイル削除スクリプト
 # AWS_SSO_CONFIG_GENERATOR で生成されたプロファイルを削除します
 
-set -e
+set -euo pipefail
 
 # 共通関数とカラー設定を読み込み
 source "$(dirname "$0")/lib/common.sh"
@@ -72,22 +72,30 @@ check_generated_profiles() {
 # 自動生成プロファイルの削除
 remove_generated_profiles() {
     local config_file="$1"
-    
+
+    # マーカー整合性チェック（不一致なら sed による事故的全削除を防ぐ）
+    if ! verify_marker_integrity "$config_file"; then
+        return 1
+    fi
+
     log_info "設定ファイルのバックアップを作成中..."
     local backup_file
     backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
     cp "$config_file" "$backup_file"
     log_success "バックアップファイルを作成しました: $backup_file"
-    
+
+    # 古いバックアップを最新 10 世代に絞る
+    rotate_backups "$config_file" 10
+
     log_info "自動生成プロファイルを削除中..."
-    
+
     # AWS_SSO_CONFIG_GENERATOR で囲まれたブロックを削除
     # sedを使用してSTARTからENDまでのブロックを削除
     sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
-    
+
     # 一時ファイルを削除
     rm -f "${config_file}.tmp"
-    
+
     log_success "自動生成プロファイルを削除しました"
 }
 
