@@ -203,7 +203,14 @@ generate_profiles_for_accounts() {
 
     log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
 
-    # ---------- Phase 1: アカウント一覧 ----------
+    # 全体計測の開始
+    local t_total_start
+    t_total_start=$(perf_now)
+
+    # ---------- Phase 1: アカウント一覧 + 設定ファイル準備 ----------
+    local t_phase1_start
+    t_phase1_start=$(perf_now)
+
     local accounts_data
     if ! accounts_data=$(get_accounts_data); then
         log_error "アカウント一覧の取得に失敗しました"
@@ -256,6 +263,12 @@ generate_profiles_for_accounts() {
     # ワーカーに必要な環境変数を export
     export ACCESS_TOKEN SSO_REGION SSO_SESSION_NAME SSO_START_URL CACHE_DIR CACHE_EXPIRY_HOURS
 
+    # Phase 1 完了 → Phase 2 開始 (timing)
+    local t_phase1 t_phase2_start
+    t_phase1=$(perf_diff "$t_phase1_start")
+    log_to_file "[TIMING] Phase 1 (list-accounts + setup): ${t_phase1}s"
+    t_phase2_start=$(perf_now)
+
     echo
     log_info "Phase 2: ロール取得 (並列度 $parallel, 対象 $total_accounts アカウント)"
     echo
@@ -295,6 +308,12 @@ generate_profiles_for_accounts() {
     log_to_file "Phase 2 統計: cache hit=$hit_count / API fetch=$fetch_count / error=$err_count"
     echo
     log_info "キャッシュヒット: $hit_count / API 取得: $fetch_count / 失敗: $err_count"
+
+    # Phase 2 完了 → Phase 3 開始 (timing)
+    local t_phase2 t_phase3_start
+    t_phase2=$(perf_diff "$t_phase2_start")
+    log_to_file "[TIMING] Phase 2 (list-account-roles × $total_accounts, parallel=$parallel, hit=$hit_count fetch=$fetch_count err=$err_count): ${t_phase2}s"
+    t_phase3_start=$(perf_now)
 
     # ---------- Phase 3: 設定ファイル直列書き込み ----------
     local temp_accounts_file
@@ -355,8 +374,16 @@ generate_profiles_for_accounts() {
 
     add_batch_end_comment "$config_file"
 
+    # Phase 3 完了 + 全体集計 (timing)
+    local t_phase3 t_total
+    t_phase3=$(perf_diff "$t_phase3_start")
+    t_total=$(perf_diff "$t_total_start")
+    log_to_file "[TIMING] Phase 3 (config write × $total_profiles profiles): ${t_phase3}s"
+    log_to_file "[TIMING] TOTAL (generate_profiles_for_accounts): ${t_total}s"
+
     echo
     log_success "合計 $total_profiles 個のプロファイルを作成しました"
+    log_info "処理時間: 全体 ${t_total}s (Phase1: ${t_phase1}s / Phase2: ${t_phase2}s / Phase3: ${t_phase3}s)"
 
     # 失敗アカウントの集約報告
     if [ "${#failed_accounts[@]}" -gt 0 ]; then

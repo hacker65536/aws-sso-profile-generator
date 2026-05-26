@@ -56,6 +56,28 @@ log_to_file() {
     fi
 }
 
+# 高精度タイマー (bash 5+ の EPOCHREALTIME を活用、フォールバックは SECONDS)
+# perf_now: 現在時刻を返す
+# perf_diff <start> [end]: 経過時間 (秒、小数 3 桁) を返す。end 省略時は現在時刻
+perf_now() {
+    if [ -n "${EPOCHREALTIME:-}" ]; then
+        echo "$EPOCHREALTIME"
+    else
+        echo "$SECONDS"
+    fi
+}
+
+perf_diff() {
+    local start="$1"
+    local end="${2:-$(perf_now)}"
+    # 小数を含むなら awk で減算、整数のみなら bash 算術で
+    if [[ "$start" == *.* ]] || [[ "$end" == *.* ]]; then
+        awk -v s="$start" -v e="$end" 'BEGIN{ printf "%.3f", e-s }'
+    else
+        echo "$((end - start))"
+    fi
+}
+
 # 設定ファイルのパスを取得
 get_config_file() {
     if [ -n "${AWS_CONFIG_FILE:-}" ]; then
