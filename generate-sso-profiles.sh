@@ -24,27 +24,21 @@ cleanup_temp_files() {
 trap cleanup_temp_files EXIT
 
 
-# AWS CLI SSO: ListAccounts (ログメッセージなし版)
+# AWS CLI SSO: ListAccounts (キャッシュ経由)
+# 出力: "<account_id> <account_name>" の改行区切り
 get_accounts_data() {
-    # アクセストークンの存在確認
     if [ -z "$ACCESS_TOKEN" ]; then
         log_debug "ACCESS_TOKEN が設定されていません"
         return 1
     fi
 
     local accounts_json
-    if accounts_json=$(unset AWS_PROFILE; aws sso list-accounts --access-token "$ACCESS_TOKEN" --region "$SSO_REGION" --output json 2>&1); then
-        if echo "$accounts_json" | jq -e '.accountList' >/dev/null 2>&1; then
-            echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
-            return 0
-        else
-            log_debug "AWS API レスポンスに accountList が含まれていません: $accounts_json"
-            return 1
-        fi
-    else
-        log_debug "AWS CLI コマンドが失敗しました: $accounts_json"
+    if ! accounts_json=$(get_cached_accounts "$SSO_SESSION_NAME" "$SSO_START_URL" "$ACCESS_TOKEN"); then
+        log_debug "get_cached_accounts が失敗しました"
         return 1
     fi
+
+    echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
 }
 
 # AWS CLI SSO: ListAccounts (ログ付き版)
@@ -63,7 +57,8 @@ list_accounts() {
     fi
 }
 
-# AWS CLI SSO: ListAccountRoles (ログメッセージなし版)
+# AWS CLI SSO: ListAccountRoles (キャッシュ経由)
+# 出力: ロール名の改行区切り
 get_account_roles_data() {
     local account_id="$1"
 
@@ -72,16 +67,11 @@ get_account_roles_data() {
     fi
 
     local roles_json
-    if roles_json=$(unset AWS_PROFILE; aws sso list-account-roles --access-token "$ACCESS_TOKEN" --account-id "$account_id" --region "$SSO_REGION" --output json 2>/dev/null); then
-        if echo "$roles_json" | jq -e '.roleList' >/dev/null 2>&1; then
-            echo "$roles_json" | jq -r '.roleList[] | "\(.roleName)"'
-            return 0
-        else
-            return 1
-        fi
-    else
+    if ! roles_json=$(get_cached_roles "$account_id" "$ACCESS_TOKEN" "$SSO_SESSION_NAME" "$SSO_START_URL"); then
         return 1
     fi
+
+    echo "$roles_json" | jq -r '.roleList[] | "\(.roleName)"'
 }
 
 # AWS CLI SSO: ListAccountRoles (ログ付き版)
@@ -336,11 +326,18 @@ show_usage() {
     echo "オプション:"
     echo "  --help, -h          このヘルプメッセージを表示"
     echo "  --force, -f         デフォルト値で自動実行（対話なし）"
+    echo "  --refresh-cache     既存キャッシュを削除してから API を再取得"
     echo
     echo "例:"
     echo "  $0                  # 対話モードで実行"
     echo "  $0 --force          # デフォルト値で自動実行"
+    echo "  $0 --refresh-cache  # キャッシュ無効化してから実行"
     echo "  $0 --help           # ヘルプを表示"
+    echo
+    echo "キャッシュ:"
+    echo "  AWS SSO API レスポンスを ${CACHE_DIR:-.aws-sso-cache} に保存します"
+    echo "  デフォルト TTL: ${CACHE_EXPIRY_HOURS:-24} 時間"
+    echo "  環境変数: CACHE_DIR / CACHE_EXPIRY_HOURS で上書き可能"
     echo
     echo "デフォルト設定:"
     echo "  プレフィックス: awssso"
@@ -380,6 +377,7 @@ check_and_handle_aws_profile() {
 # メイン実行
 main() {
     local force_mode=false
+    local refresh_cache=false
 
     # コマンドライン引数の処理
     while [[ $# -gt 0 ]]; do
@@ -390,6 +388,10 @@ main() {
                 ;;
             --force|-f)
                 force_mode=true
+                shift
+                ;;
+            --refresh-cache)
+                refresh_cache=true
                 shift
                 ;;
             *)
@@ -407,6 +409,12 @@ main() {
 
     if [ "$force_mode" = true ]; then
         log_info "フォースモード: デフォルト値で自動実行します"
+        echo
+    fi
+
+    if [ "$refresh_cache" = true ]; then
+        log_info "--refresh-cache: 既存キャッシュを削除します"
+        clear_cache
         echo
     fi
 
@@ -539,6 +547,7 @@ main() {
     if [ "$force_mode" = true ]; then
         log_info "フォースモード: 既存の自動生成ブロックを削除して再生成します"
         generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type"
+        update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
         echo
         log_success "プロファイル自動生成が完了しました！"
         log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
@@ -547,6 +556,7 @@ main() {
         read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
             generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type"
+            update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
             echo
             log_success "プロファイル自動生成が完了しました！"
             log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
