@@ -14,11 +14,15 @@ SSO_REGION=""
 SSO_START_URL=""
 ACCESS_TOKEN=""
 
-# 一時ファイルの管理
+# 一時ファイル/ディレクトリの管理
 TEMP_FILES=()
+TEMP_DIRS=()
 cleanup_temp_files() {
     for f in "${TEMP_FILES[@]:-}"; do
         rm -f "$f"
+    done
+    for d in "${TEMP_DIRS[@]:-}"; do
+        rm -rf "$d"
     done
 }
 trap cleanup_temp_files EXIT
@@ -204,6 +208,9 @@ remove_generated_blocks() {
 }
 
 # 複数アカウントのプロファイル自動生成
+# Phase 1: list-accounts でアカウント一覧取得 (キャッシュ経由)
+# Phase 2: xargs -P でロール取得を並列化 (ワーカー: lib/fetch-account-roles.sh)
+# Phase 3: 親プロセスが直列に設定ファイルへ追記
 generate_profiles_for_accounts() {
     local config_file="$1"
     local prefix="$2"
@@ -213,107 +220,170 @@ generate_profiles_for_accounts() {
 
     log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
 
+    # ---------- Phase 1: アカウント一覧 ----------
     local accounts_data
     if ! accounts_data=$(get_accounts_data); then
         log_error "アカウント一覧の取得に失敗しました"
         return 1
     fi
 
-    # アカウント数をカウント
+    # アカウント数をカウントし、max_accounts で絞る
     local total_accounts
     total_accounts=$(echo "$accounts_data" | wc -l | tr -d ' ')
     if [ "$total_accounts" -gt "$max_accounts" ]; then
         total_accounts="$max_accounts"
     fi
 
-    # 設定ファイルのバックアップ
+    local accounts_subset
+    accounts_subset=$(echo "$accounts_data" | head -n "$total_accounts")
+
+    # ---------- 設定ファイルの準備 (バックアップ + 既存ブロック削除) ----------
     if [ -f "$config_file" ]; then
         local backup_file
         backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
         cp "$config_file" "$backup_file"
         log_info "設定ファイルをバックアップしました: $backup_file"
-        # 古いバックアップを最新 10 世代に絞る
         rotate_backups "$config_file" 10
     fi
 
-    # 既存の自動生成ブロックをすべて削除してからクリーンな状態で再生成
     if ! remove_generated_blocks "$config_file"; then
         log_error "既存ブロックの削除に失敗したため生成処理を中止します"
         return 1
     fi
 
-    # 一括処理開始コメントを追加
     add_batch_start_comment "$config_file"
 
-    local count=0
-    local total_profiles=0
+    # ---------- Phase 2: ロール取得を並列化 ----------
+    local roles_tmpdir xargs_log script_dir worker parallel
+    roles_tmpdir=$(mktemp -d)
+    TEMP_DIRS+=("$roles_tmpdir")
+    xargs_log=$(mktemp)
+    TEMP_FILES+=("$xargs_log")
 
-    # 一時ファイルを使用してアカウントデータを処理
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    worker="${script_dir}/lib/fetch-account-roles.sh"
+
+    # 並列度: --parallel フラグ > PARALLEL 環境変数 > デフォルト 8
+    parallel="${PARALLEL_OPT:-${PARALLEL:-8}}"
+    if ! [[ "$parallel" =~ ^[0-9]+$ ]] || [ "$parallel" -lt 1 ]; then
+        log_warning "不正な並列度 '$parallel'。デフォルト 8 を使用します"
+        parallel=8
+    fi
+
+    # ワーカーに必要な環境変数を export
+    export ACCESS_TOKEN SSO_REGION SSO_SESSION_NAME SSO_START_URL CACHE_DIR CACHE_EXPIRY_HOURS
+
+    echo
+    log_info "Phase 2: ロール取得 (並列度 $parallel, 対象 $total_accounts アカウント)"
+    echo
+
+    printf "%s" "$HIDE_CURSOR"
+
+    local account_ids
+    account_ids=$(echo "$accounts_subset" | grep -oE '^[0-9]+')
+
+    # xargs -P でワーカーを並列実行 (stdout/stderr はログへ集約)
+    # bash で明示的に呼ぶことで、ワーカーに +x が無くても動作する
+    echo "$account_ids" | xargs -P "$parallel" -I {} \
+        bash "$worker" {} "$roles_tmpdir" \
+        > "$xargs_log" 2>&1 &
+    local xargs_pid=$!
+
+    # 進捗ポーリング: tmpdir の完了ファイル数を 0.3 秒ごとに数える
+    while kill -0 "$xargs_pid" 2>/dev/null; do
+        local done_count
+        done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
+            \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
+        show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中"
+        sleep 0.3
+    done
+    wait "$xargs_pid" || true
+
+    show_progress_complete "$total_accounts" "ロール取得完了"
+
+    # キャッシュ統計 (ログとサマリ表示)
+    local hit_count fetch_count err_count
+    hit_count=$(grep -c '^hit ' "$xargs_log" 2>/dev/null || true)
+    fetch_count=$(grep -c '^fetch ' "$xargs_log" 2>/dev/null || true)
+    err_count=$(grep -c '^err ' "$xargs_log" 2>/dev/null || true)
+    hit_count=${hit_count:-0}
+    fetch_count=${fetch_count:-0}
+    err_count=${err_count:-0}
+    log_to_file "Phase 2 統計: cache hit=$hit_count / API fetch=$fetch_count / error=$err_count"
+    echo
+    log_info "キャッシュヒット: $hit_count / API 取得: $fetch_count / 失敗: $err_count"
+
+    # ---------- Phase 3: 設定ファイル直列書き込み ----------
     local temp_accounts_file
     temp_accounts_file=$(mktemp)
     TEMP_FILES+=("$temp_accounts_file")
-    echo "$accounts_data" > "$temp_accounts_file"
+    echo "$accounts_subset" > "$temp_accounts_file"
 
     echo
-    log_info "プロファイル生成開始: $total_accounts 個のアカウント"
+    log_info "Phase 3: プロファイル設定書き込み"
     echo
 
-    # カーソルを非表示にする
-    printf "%s" "$HIDE_CURSOR"
+    local count=0
+    local total_profiles=0
+    local failed_accounts=()
 
-    while IFS= read -r line && [ "$count" -lt "$max_accounts" ]; do
-        local account_id
-        local account_name
-
+    while IFS= read -r line; do
+        local account_id account_name
         account_id=$(echo "$line" | grep -o '^[0-9]\+')
         account_name=${line#* }
 
-        if [ -n "$account_id" ] && [ -n "$account_name" ]; then
-            # プログレス表示
-            show_progress_with_counter "$((count + 1))" "$total_accounts" "プロファイル生成中: $account_name"
-
-            local roles_data
-            if roles_data=$(get_account_roles_data "$account_id"); then
-                local role_count=0
-
-                # 一時ファイルを使用してロールデータを処理
-                local temp_roles_file
-                temp_roles_file=$(mktemp)
-                TEMP_FILES+=("$temp_roles_file")
-                echo "$roles_data" > "$temp_roles_file"
-
-                while IFS= read -r role_name; do
-                    if [ -n "$role_name" ]; then
-                        local profile_name
-                        profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
-
-                        create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
-                        log_to_file "✅ プロファイル作成: $profile_name"
-                        role_count=$((role_count + 1))
-                        total_profiles=$((total_profiles + 1))
-                    fi
-                done < "$temp_roles_file"
-
-                rm -f "$temp_roles_file"
-                log_to_file "アカウント $account_name: $role_count 個のプロファイルを処理"
-            else
-                log_to_file "⚠️ アカウント $account_name のロール取得に失敗しました"
-            fi
-
-            count=$((count + 1))
+        if [ -z "$account_id" ] || [ -z "$account_name" ]; then
+            continue
         fi
+
+        show_progress_with_counter "$((count + 1))" "$total_accounts" "書き込み中: $account_name"
+
+        local roles_file="${roles_tmpdir}/${account_id}.roles"
+        local err_file="${roles_tmpdir}/${account_id}.err"
+
+        if [ -f "$roles_file" ]; then
+            local role_count=0
+            while IFS= read -r role_name; do
+                if [ -n "$role_name" ]; then
+                    local profile_name
+                    profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
+                    create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                    log_to_file "✅ プロファイル作成: $profile_name"
+                    role_count=$((role_count + 1))
+                    total_profiles=$((total_profiles + 1))
+                fi
+            done < "$roles_file"
+            log_to_file "アカウント $account_name: $role_count 個のプロファイルを処理"
+        elif [ -f "$err_file" ]; then
+            failed_accounts+=("$account_name ($account_id)")
+            local err_detail
+            err_detail=$(head -n1 "$err_file")
+            log_to_file "⚠️ アカウント $account_name のロール取得に失敗: $err_detail"
+        else
+            failed_accounts+=("$account_name ($account_id)")
+            log_to_file "⚠️ アカウント $account_name の結果ファイルが見つかりません"
+        fi
+
+        count=$((count + 1))
     done < "$temp_accounts_file"
 
-    # プログレス完了表示
     show_progress_complete "$total_accounts" "プロファイル生成完了"
 
-    rm -f "$temp_accounts_file"
-
-    # 一括処理終了コメントを追加
     add_batch_end_comment "$config_file"
 
     echo
     log_success "合計 $total_profiles 個のプロファイルを作成しました"
+
+    # 失敗アカウントの集約報告
+    if [ "${#failed_accounts[@]}" -gt 0 ]; then
+        echo
+        log_warning "ロール取得に失敗したアカウント (${#failed_accounts[@]} 個):"
+        local acct
+        for acct in "${failed_accounts[@]}"; do
+            echo "  - $acct"
+        done
+        log_info "詳細は ${LOG_FILE} を参照してください"
+    fi
 }
 
 # ヘルプメッセージの表示
@@ -327,17 +397,24 @@ show_usage() {
     echo "  --help, -h          このヘルプメッセージを表示"
     echo "  --force, -f         デフォルト値で自動実行（対話なし）"
     echo "  --refresh-cache     既存キャッシュを削除してから API を再取得"
+    echo "  --parallel N        並列度 (省略時 PARALLEL 環境変数または 8)"
     echo
     echo "例:"
     echo "  $0                  # 対話モードで実行"
     echo "  $0 --force          # デフォルト値で自動実行"
     echo "  $0 --refresh-cache  # キャッシュ無効化してから実行"
+    echo "  $0 --parallel 16    # 並列度 16 で実行"
     echo "  $0 --help           # ヘルプを表示"
     echo
     echo "キャッシュ:"
     echo "  AWS SSO API レスポンスを ${CACHE_DIR:-.aws-sso-cache} に保存します"
     echo "  デフォルト TTL: ${CACHE_EXPIRY_HOURS:-24} 時間"
     echo "  環境変数: CACHE_DIR / CACHE_EXPIRY_HOURS で上書き可能"
+    echo
+    echo "並列処理:"
+    echo "  list-account-roles をアカウント単位で並列実行します"
+    echo "  AWS SSO Portal API の経験的安全圏 (5-10) からデフォルト 8 を採用"
+    echo "  環境変数 PARALLEL でも上書き可能 (--parallel フラグが優先)"
     echo
     echo "デフォルト設定:"
     echo "  プレフィックス: awssso"
@@ -393,6 +470,19 @@ main() {
             --refresh-cache)
                 refresh_cache=true
                 shift
+                ;;
+            --parallel)
+                if [ $# -lt 2 ]; then
+                    log_error "--parallel には数値引数が必要です"
+                    exit 1
+                fi
+                if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -lt 1 ]; then
+                    log_error "--parallel の値は 1 以上の整数で指定してください: $2"
+                    exit 1
+                fi
+                # generate_profiles_for_accounts は PARALLEL_OPT を最優先で読む
+                export PARALLEL_OPT="$2"
+                shift 2
                 ;;
             *)
                 log_error "不明なオプション: $1"
