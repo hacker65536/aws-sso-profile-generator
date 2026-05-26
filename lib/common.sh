@@ -110,6 +110,226 @@ rotate_backups() {
     fi
 }
 
+# ============================================================================
+# キャッシュ層 (AWS SSO API レスポンスのローカルキャッシュ)
+# ============================================================================
+
+# キャッシュディレクトリと TTL (環境変数で上書き可能)
+CACHE_DIR="${CACHE_DIR:-${PWD}/.aws-sso-cache}"
+CACHE_EXPIRY_HOURS="${CACHE_EXPIRY_HOURS:-24}"
+
+# セッション識別ハッシュ (start_url から 8 桁の hex を生成)
+# 同じ start_url なら同じハッシュになるため、セッション設定変更時に自動無効化される
+cache_session_hash() {
+    local start_url="$1"
+    if command -v md5sum >/dev/null 2>&1; then
+        printf '%s' "$start_url" | md5sum | cut -c1-8
+    elif command -v md5 >/dev/null 2>&1; then
+        printf '%s' "$start_url" | md5 -q | cut -c1-8
+    else
+        # フォールバック: cksum (POSIX、ハッシュ強度は低いが常用可)
+        printf '%s' "$start_url" | cksum | awk '{print $1}' | head -c 8
+    fi
+}
+
+# キャッシュファイルパス算出
+cache_file_accounts() {
+    local session_name="$1"
+    local hash="$2"
+    echo "${CACHE_DIR}/accounts-${session_name}-${hash}.json"
+}
+
+cache_file_roles() {
+    local account_id="$1"
+    local hash="$2"
+    echo "${CACHE_DIR}/roles-${account_id}-${hash}.json"
+}
+
+# キャッシュ有効性チェック (ファイル存在 + 非空 + TTL 内)
+is_cache_valid() {
+    local file="$1"
+    [ -f "$file" ] && [ -s "$file" ] || return 1
+    local max_mmin
+    max_mmin=$(awk -v h="${CACHE_EXPIRY_HOURS:-24}" 'BEGIN{ printf "%.0f", h * 60 }')
+    # find -mmin -N : 過去 N 分以内に変更されたファイルを返す (BSD/GNU 両対応)
+    [ -n "$(find "$file" -mmin "-${max_mmin}" 2>/dev/null)" ]
+}
+
+# キャッシュディレクトリの確実な作成
+ensure_cache_dir() {
+    if [ ! -d "$CACHE_DIR" ]; then
+        mkdir -p "$CACHE_DIR" 2>/dev/null || {
+            log_error "キャッシュディレクトリを作成できません: $CACHE_DIR"
+            return 1
+        }
+    fi
+}
+
+# 原子的にキャッシュファイルを書き込む (.tmp 経由 + mv)
+# 中断やプロセス競合でも壊れたファイルが残らない
+write_cache_atomic() {
+    local file="$1"
+    local content="$2"
+    local tmp="${file}.tmp.$$"
+    printf '%s\n' "$content" > "$tmp" || return 1
+    mv -f "$tmp" "$file" || { rm -f "$tmp"; return 1; }
+}
+
+# アカウント一覧のキャッシュ付き取得
+# 引数: <session_name> <start_url> <access_token>
+# 出力: list-accounts の raw JSON (stdout)
+get_cached_accounts() {
+    local session_name="$1"
+    local start_url="$2"
+    local token="$3"
+
+    ensure_cache_dir || return 1
+
+    local hash cache_file
+    hash=$(cache_session_hash "$start_url")
+    cache_file=$(cache_file_accounts "$session_name" "$hash")
+
+    if is_cache_valid "$cache_file"; then
+        log_debug "キャッシュヒット: $cache_file"
+        cat "$cache_file"
+        return 0
+    fi
+
+    log_debug "キャッシュミス: $cache_file (API 呼び出し)"
+    local json
+    if ! json=$(unset AWS_PROFILE; aws sso list-accounts --access-token "$token" --region "${SSO_REGION:-}" --output json 2>/dev/null); then
+        return 1
+    fi
+    if ! echo "$json" | jq -e '.accountList' >/dev/null 2>&1; then
+        return 1
+    fi
+    write_cache_atomic "$cache_file" "$json" || return 1
+    echo "$json"
+}
+
+# ロール一覧のキャッシュ付き取得
+# 引数: <account_id> <access_token> <session_name> <start_url>
+# 出力: list-account-roles の raw JSON (stdout)
+# 引数順は test/test-cache.sh および CACHE_USAGE.md の慣例に合わせる
+get_cached_roles() {
+    local account_id="$1"
+    local token="$2"
+    # session_name は将来の拡張用に受け取るが現時点では未使用 (hash は start_url から計算)
+    local _session_name="$3"
+    local start_url="$4"
+
+    ensure_cache_dir || return 1
+
+    local hash cache_file
+    hash=$(cache_session_hash "$start_url")
+    cache_file=$(cache_file_roles "$account_id" "$hash")
+
+    if is_cache_valid "$cache_file"; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    local json
+    if ! json=$(unset AWS_PROFILE; aws sso list-account-roles --access-token "$token" --account-id "$account_id" --region "${SSO_REGION:-}" --output json 2>/dev/null); then
+        return 1
+    fi
+    if ! echo "$json" | jq -e '.roleList' >/dev/null 2>&1; then
+        return 1
+    fi
+    write_cache_atomic "$cache_file" "$json" || return 1
+    echo "$json"
+}
+
+# キャッシュ削除
+# 引数: [session_name]  指定時はそのセッションの accounts のみ削除、未指定は全削除
+clear_cache() {
+    local session_filter="${1:-}"
+
+    if [ ! -d "$CACHE_DIR" ]; then
+        log_info "キャッシュディレクトリが存在しません: $CACHE_DIR"
+        return 0
+    fi
+
+    if [ -n "$session_filter" ]; then
+        log_info "セッション '$session_filter' のキャッシュを削除中..."
+        # accounts-{session}-{hash}.json から hash を抽出し、対応する roles-*-{hash}.json も削除
+        local f basename prefix hash
+        while IFS= read -r f; do
+            basename="${f##*/}"
+            prefix="accounts-${session_filter}-"
+            hash="${basename#"$prefix"}"
+            hash="${hash%.json}"
+            rm -f "$f"
+            if [ -n "$hash" ]; then
+                find "$CACHE_DIR" -maxdepth 1 -type f -name "roles-*-${hash}.json" -delete 2>/dev/null || true
+            fi
+        done < <(find "$CACHE_DIR" -maxdepth 1 -type f -name "accounts-${session_filter}-*.json" 2>/dev/null)
+    else
+        log_info "全キャッシュを削除中..."
+        find "$CACHE_DIR" -maxdepth 1 -type f \
+            \( -name "accounts-*.json" -o -name "roles-*.json" -o -name "metadata.json" \) \
+            -delete 2>/dev/null || true
+    fi
+    log_success "キャッシュを削除しました"
+}
+
+# キャッシュ統計表示
+show_cache_stats() {
+    log_info "キャッシュ統計:"
+    echo "  キャッシュディレクトリ: $CACHE_DIR"
+
+    if [ ! -d "$CACHE_DIR" ]; then
+        echo "  (ディレクトリ未作成)"
+        return 0
+    fi
+
+    local total accounts roles metadata
+    total=$(find "$CACHE_DIR" -maxdepth 1 -type f 2>/dev/null | wc -l | tr -d ' ')
+    accounts=$(find "$CACHE_DIR" -maxdepth 1 -type f -name "accounts-*.json" 2>/dev/null | wc -l | tr -d ' ')
+    roles=$(find "$CACHE_DIR" -maxdepth 1 -type f -name "roles-*.json" 2>/dev/null | wc -l | tr -d ' ')
+    if [ -f "$CACHE_DIR/metadata.json" ]; then
+        metadata=1
+    else
+        metadata=0
+    fi
+
+    echo "  総ファイル数: $total"
+    echo "  アカウントキャッシュ: $accounts"
+    echo "  ロールキャッシュ: $roles"
+    echo "  メタデータファイル: $metadata"
+    echo "  有効期限: ${CACHE_EXPIRY_HOURS} 時間"
+
+    local max_mmin expired
+    max_mmin=$(awk -v h="${CACHE_EXPIRY_HOURS:-24}" 'BEGIN{ printf "%.0f", h * 60 }')
+    expired=$(find "$CACHE_DIR" -maxdepth 1 -type f \
+        \( -name "accounts-*.json" -o -name "roles-*.json" \) \
+        ! -mmin "-${max_mmin}" 2>/dev/null | wc -l | tr -d ' ')
+    echo "  期限切れファイル: $expired"
+}
+
+# メタデータファイルの更新 (親プロセスのみが呼ぶこと)
+update_cache_metadata() {
+    local session_name="$1"
+    local start_url="$2"
+
+    ensure_cache_dir || return 1
+
+    local hash metadata_file content
+    hash=$(cache_session_hash "$start_url")
+    metadata_file="${CACHE_DIR}/metadata.json"
+    content=$(cat <<EOF
+{
+  "last_session": "$session_name",
+  "last_start_url": "$start_url",
+  "session_hash": "$hash",
+  "updated_at": "$(date -u '+%Y-%m-%dT%H:%M:%SZ')",
+  "cache_expiry_hours": ${CACHE_EXPIRY_HOURS}
+}
+EOF
+)
+    write_cache_atomic "$metadata_file" "$content"
+}
+
 # 現在の日付と時間を取得
 get_current_datetime() {
     date '+%Y/%m/%d %H:%M:%S'
