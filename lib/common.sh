@@ -21,6 +21,15 @@ ERASE_LINE="${CSI}2K"
 HIDE_CURSOR="${CSI}?25l"
 SHOW_CURSOR="${CSI}?25h"
 
+# キー・値ペアを揃えて表示するヘルパー
+# 引数: $1=key, $2=value, $3=width (省略時 20)
+# printf %-*s で左寄せ固定幅、外部プロセスゼロ
+# 英語/半角キー前提（全角キーは display width 問題で揃わないので英語推奨）
+log_kv() {
+    local key="$1" value="$2" width="${3:-20}"
+    printf '  %-*s : %s\n' "$width" "$key" "$value"
+}
+
 # ログ出力関数
 log_info() {
     echo -e "${BLUE}ℹ️  $1${NC}"
@@ -384,11 +393,11 @@ clear_cache() {
 
 # キャッシュ統計表示
 show_cache_stats() {
-    log_info "キャッシュ統計:"
-    echo "  キャッシュディレクトリ: $CACHE_DIR"
+    log_info "Cache statistics:"
+    log_kv "Cache directory" "$CACHE_DIR"
 
     if [ ! -d "$CACHE_DIR" ]; then
-        echo "  (ディレクトリ未作成)"
+        echo "  (directory not created yet)"
         return 0
     fi
 
@@ -402,18 +411,18 @@ show_cache_stats() {
         metadata=0
     fi
 
-    echo "  総ファイル数: $total"
-    echo "  アカウントキャッシュ: $accounts"
-    echo "  ロールキャッシュ: $roles"
-    echo "  メタデータファイル: $metadata"
-    echo "  有効期限: ${CACHE_EXPIRY_HOURS} 時間"
+    log_kv "Total files"      "$total"
+    log_kv "Accounts cache"   "$accounts"
+    log_kv "Roles cache"      "$roles"
+    log_kv "Metadata file"    "$metadata"
+    log_kv "TTL (hours)"      "${CACHE_EXPIRY_HOURS}"
 
     local max_mmin expired
     max_mmin=$(awk -v h="${CACHE_EXPIRY_HOURS:-24}" 'BEGIN{ printf "%.0f", h * 60 }')
     expired=$(find "$CACHE_DIR" -maxdepth 1 -type f \
         \( -name "accounts-*.json" -o -name "roles-*.json" \) \
         ! -mmin "-${max_mmin}" 2>/dev/null | wc -l | tr -d ' ')
-    echo "  期限切れファイル: $expired"
+    log_kv "Expired files"    "$expired"
 }
 
 # メタデータファイルの更新 (親プロセスのみが呼ぶこと)
@@ -509,11 +518,11 @@ show_profile_stats() {
     # 自動生成プロファイル数の取得
     managed_count=$(sed -n '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/p' "$config_file" 2>/dev/null | grep -c "^\[profile " || echo "0")
 
-    log_info "プロファイル統計:"
-    echo "  総プロファイル数: $total_profiles"
-    echo "  SSOプロファイル数: $sso_profiles"
-    echo "  SSO セッション数: $total_sso_sessions"
-    echo "  自動生成プロファイル数: $managed_count"
+    log_info "Profile statistics:"
+    log_kv "Total profiles"    "$total_profiles"
+    log_kv "SSO profiles"      "$sso_profiles"
+    log_kv "SSO sessions"      "$total_sso_sessions"
+    log_kv "Auto-generated"    "$managed_count"
 }
 
 # 詳細なプロファイルサマリーの表示
@@ -547,10 +556,10 @@ show_detailed_profile_summary() {
     local gen_timestamps
     gen_timestamps=$(grep "^# AWS_SSO_CONFIG_GENERATOR START" "$config_file" 2>/dev/null | sed 's/^# AWS_SSO_CONFIG_GENERATOR START //' || true)
 
-    echo "設定サマリー:"
-    echo "  SSO セッション数: $total_sso_sessions"
-    echo "  プロファイル数: $total_profiles"
-    echo "  自動生成プロファイル数: $managed_count"
+    echo "Summary:"
+    log_kv "SSO sessions"   "$total_sso_sessions"
+    log_kv "Profiles"       "$total_profiles"
+    log_kv "Auto-generated" "$managed_count"
 
     # SSO セッション一覧の表示
     if [ "$total_sso_sessions" -gt 0 ]; then

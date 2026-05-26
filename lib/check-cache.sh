@@ -25,11 +25,11 @@ show_usage() {
 }
 
 cmd_validate() {
-    log_info "キャッシュ有効性チェック:"
-    echo "  キャッシュディレクトリ: $CACHE_DIR"
+    log_info "Cache validation:"
+    log_kv "Cache directory" "$CACHE_DIR"
 
     if [ ! -d "$CACHE_DIR" ]; then
-        echo "  (ディレクトリ未作成)"
+        echo "  (directory not created yet)"
         return 0
     fi
 
@@ -44,8 +44,8 @@ cmd_validate() {
         \( -name "accounts-*.json" -o -name "roles-*.json" \) \
         ! -mmin "-${max_mmin}" 2>/dev/null | wc -l | tr -d ' ')
 
-    echo "  有効: ${valid_count} 件 (TTL ${CACHE_EXPIRY_HOURS:-24} 時間内)"
-    echo "  期限切れ: ${expired_count} 件"
+    log_kv "Valid (within TTL)" "${valid_count}  (TTL: ${CACHE_EXPIRY_HOURS:-24} hours)"
+    log_kv "Expired"            "${expired_count}"
 
     if [ "$expired_count" -gt 0 ]; then
         echo

@@ -160,10 +160,10 @@ check_sso_config() {
         fi
         
         echo "📋 使用中のセッション詳細:"
-        echo "  Session名: $SSO_SESSION_NAME"
-        echo "  SSO Region: $SSO_REGION"
-        echo "  SSO Start URL: $SSO_START_URL"
-        
+        log_kv "Session"        "$SSO_SESSION_NAME"
+        log_kv "SSO Region"     "$SSO_REGION"
+        log_kv "SSO Start URL"  "$SSO_START_URL"
+
         log_success "SSO設定は正常です"
         
         # SSO セッション状態もチェック
@@ -210,9 +210,9 @@ check_specific_sso_session() {
         log_success "指定されたSSO Session設定が見つかりました"
         
         echo "📋 セッション詳細:"
-        echo "  Session名: $SSO_SESSION_NAME"
-        echo "  SSO Region: $SSO_REGION"
-        echo "  SSO Start URL: $SSO_START_URL"
+        log_kv "Session"        "$SSO_SESSION_NAME"
+        log_kv "SSO Region"     "$SSO_REGION"
+        log_kv "SSO Start URL"  "$SSO_START_URL"
         
         log_success "SSO設定は正常です"
         

@@ -18,8 +18,8 @@ check_region_config() {
     local aws_region="${AWS_REGION:-未設定}"
     local aws_default_region="${AWS_DEFAULT_REGION:-未設定}"
     
-    echo "  AWS_REGION: $aws_region"
-    echo "  AWS_DEFAULT_REGION: $aws_default_region"
+    log_kv "AWS_REGION"          "$aws_region"
+    log_kv "AWS_DEFAULT_REGION"  "$aws_default_region"
     
     # 2. AWS CLI設定の確認
     echo
@@ -27,7 +27,7 @@ check_region_config() {
     if command -v aws &> /dev/null; then
         local cli_region
         cli_region=$(unset AWS_PROFILE; aws configure get region 2>/dev/null || echo "未設定")
-        echo "  aws configure get region: $cli_region"
+        log_kv "aws configure get region" "$cli_region"
         
         # 3. aws configure list での確認
         echo
