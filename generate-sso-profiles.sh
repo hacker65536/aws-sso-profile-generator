@@ -100,18 +100,19 @@ list_account_roles() {
     fi
 }
 
-# アカウント名の正規化（フル正規化）
+# アカウント名の正規化（フル正規化）- pure bash パラメータ展開
+# 小文字化 + スペース/ハイフン→アンダースコア + 英数字_以外を除去
 normalize_account_name_full() {
-    local account_name="$1"
-    # 小文字に変換し、スペースやハイフンをアンダースコアに置換
-    echo "$account_name" | tr '[:upper:]' '[:lower:]' | sed 's/[[:space:]-]/_/g' | sed 's/[^a-z0-9_]//g'
+    local s="${1,,}"                 # bash 4+ 小文字化
+    s="${s//[[:space:]-]/_}"         # space/hyphen → underscore
+    echo "${s//[^a-z0-9_]/}"         # 非 [a-z0-9_] を除去
 }
 
-# アカウント名の正規化（最小限）
+# アカウント名の正規化（最小限）- pure bash パラメータ展開
+# スペースのみアンダースコア化、大文字とハイフンはそのまま
 normalize_account_name_minimal() {
-    local account_name="$1"
-    # スペースのみをアンダースコアに変換、大文字小文字とハイフンはそのまま
-    echo "$account_name" | sed 's/[[:space:]]/_/g' | sed 's/[^a-zA-Z0-9_-]//g'
+    local s="${1//[[:space:]]/_}"    # space → underscore
+    echo "${s//[^a-zA-Z0-9_-]/}"     # 非 [a-zA-Z0-9_-] を除去
 }
 
 # アカウント名の正規化（デフォルト）
@@ -146,30 +147,12 @@ generate_profile_name() {
 
 
 
-# プロファイル設定の作成（コメントなし）
+# プロファイル設定の作成 - 単一 printf で外部プロセスゼロ
 create_profile_config() {
-    local config_file="$1"
-    local profile_name="$2"
-    local account_id="$3"
-    local role_name="$4"
-    local region="$5"
-
-    # 設定内容を作成（コメントなし）
-    local config_content
-    config_content=$(cat << EOF
-
-[profile $profile_name]
-sso_session = $SSO_SESSION_NAME
-sso_account_id = $account_id
-sso_role_name = $role_name
-region = $region
-output = json
-cli_pager =
-EOF
-)
-
-    # 設定ファイルに追加
-    echo "$config_content" >> "$config_file"
+    local config_file="$1" profile_name="$2" account_id="$3" role_name="$4" region="$5"
+    printf '\n[profile %s]\nsso_session = %s\nsso_account_id = %s\nsso_role_name = %s\nregion = %s\noutput = json\ncli_pager =\n' \
+        "$profile_name" "$SSO_SESSION_NAME" "$account_id" "$role_name" "$region" \
+        >> "$config_file"
 }
 
 # 一括処理開始コメントの追加
@@ -328,11 +311,12 @@ generate_profiles_for_accounts() {
     local failed_accounts=()
 
     while IFS= read -r line; do
-        local account_id account_name
-        account_id=$(echo "$line" | grep -o '^[0-9]\+')
-        account_name=${line#* }
+        # pure bash パラメータ展開 (echo | grep の subshell 排除)
+        local account_id="${line%% *}"      # 最初の空白までを抽出
+        local account_name="${line#* }"     # 最初の空白以降
 
-        if [ -z "$account_id" ] || [ -z "$account_name" ]; then
+        # 数字のみであることを確認 (旧 grep -o '^[0-9]\+' の代替)
+        if [ -z "$account_id" ] || [ -z "$account_name" ] || ! [[ "$account_id" =~ ^[0-9]+$ ]]; then
             continue
         fi
 
