@@ -212,6 +212,12 @@ generate_profiles_for_accounts() {
     local t_total_start
     t_total_start=$(perf_now)
 
+    # Diff 用: 実行前の既存自動生成プロファイル一覧を取得 (空ならスキップ)
+    local _diff_before_file
+    _diff_before_file=$(mktemp)
+    TEMP_FILES+=("$_diff_before_file")
+    extract_auto_profiles "$config_file" > "$_diff_before_file"
+
     # ---------- Phase 1: アカウント一覧 + 設定ファイル準備 ----------
     local t_phase1_start
     t_phase1_start=$(perf_now)
@@ -500,6 +506,61 @@ generate_profiles_for_accounts() {
         log_success "合計 $total_profiles 個のプロファイルを作成しました"
     fi
     log_info "処理時間: 全体 ${t_total}s (Phase1: ${t_phase1}s / Phase2: ${t_phase2}s / Phase3: ${t_phase3}s)"
+
+    # === Diff 表示 (前回の自動生成プロファイル vs 今回) ===
+    local _diff_after_file _added _removed _unchanged _added_count _removed_count _unchanged_count
+    _diff_after_file=$(mktemp)
+    TEMP_FILES+=("$_diff_after_file")
+    printf '%s\n' "${generated_profiles[@]}" | sort > "$_diff_after_file"
+
+    _added=$(comm -13 "$_diff_before_file" "$_diff_after_file")
+    _removed=$(comm -23 "$_diff_before_file" "$_diff_after_file")
+    _unchanged=$(comm -12 "$_diff_before_file" "$_diff_after_file")
+    _added_count=$(printf '%s\n' "$_added" | grep -c . 2>/dev/null || true)
+    _removed_count=$(printf '%s\n' "$_removed" | grep -c . 2>/dev/null || true)
+    _unchanged_count=$(printf '%s\n' "$_unchanged" | grep -c . 2>/dev/null || true)
+    _added_count=${_added_count:-0}
+    _removed_count=${_removed_count:-0}
+    _unchanged_count=${_unchanged_count:-0}
+
+    # 初回実行は前回データなし → "初回生成" 扱い
+    if [ ! -s "$_diff_before_file" ]; then
+        log_to_file "Diff: 初回生成 (新規 $total_profiles 件)"
+    else
+        log_to_file "Diff: 追加=$_added_count / 削除=$_removed_count / 変更なし=$_unchanged_count"
+    fi
+
+    echo
+    if [ ! -s "$_diff_before_file" ]; then
+        log_info "📋 初回生成: 新規 $total_profiles プロファイル"
+    elif [ "$_added_count" -eq 0 ] && [ "$_removed_count" -eq 0 ]; then
+        log_info "📋 前回と同一 (変更なし: $_unchanged_count プロファイル)"
+    else
+        log_info "📋 前回からの差分:"
+        if [ "$_added_count" -gt 0 ]; then
+            echo "   + $_added_count 件 追加"
+            printf '%s\n' "$_added" | head -5 | sed 's/^/     + /'
+            [ "$_added_count" -gt 5 ] && echo "     ... (残り $((_added_count - 5)) 件はログ参照)"
+        fi
+        if [ "$_removed_count" -gt 0 ]; then
+            echo "   - $_removed_count 件 削除"
+            printf '%s\n' "$_removed" | head -5 | sed 's/^/     - /'
+            [ "$_removed_count" -gt 5 ] && echo "     ... (残り $((_removed_count - 5)) 件はログ参照)"
+        fi
+        echo "   = $_unchanged_count 件 変更なし"
+
+        # 追加/削除の完全リストはログにのみ出す
+        if [ -n "$_added" ]; then
+            printf '%s\n' "$_added" | while IFS= read -r p; do
+                [ -n "$p" ] && log_to_file "Diff: + $p"
+            done
+        fi
+        if [ -n "$_removed" ]; then
+            printf '%s\n' "$_removed" | while IFS= read -r p; do
+                [ -n "$p" ] && log_to_file "Diff: - $p"
+            done
+        fi
+    fi
 
     # 失敗アカウントの集約報告
     if [ "${#failed_accounts[@]}" -gt 0 ]; then
