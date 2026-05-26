@@ -567,6 +567,13 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+- **v1.17.0** - パフォーマンスチューニング (subshell 削減)
+  - `log_to_file` の `$(date ...)` を bash 内蔵 `printf %()T` に置換 (約 12x 高速)
+  - `normalize_account_name_full/minimal` の `echo | sed | sed` を pure bash パラメータ展開に置換
+  - `create_profile_config` の `$(cat << EOF ...)` を単一 `printf` に置換
+  - Phase 3 ループの `echo "$line" | grep -o` を `${line%% *}` + 正規表現マッチに置換
+  - 8 アカウント E2E ベンチマーク: ~13.7s → ~8-9s (約 36% 短縮)
+  - 各個別フェーズで 2-4 倍高速化
 - **v1.16.0** - キャッシュ機構と並列処理の実装
   - `lib/common.sh` にキャッシュ層 (`get_cached_accounts` / `get_cached_roles` 等) を実装
   - `list-account-roles` を `xargs -P` でアカウント単位に並列化 (`lib/fetch-account-roles.sh`)
