@@ -369,50 +369,37 @@ get_current_timezone() {
     date '+%Z %z'
 }
 
-# GNU dateコマンドの検出
-is_gnu_date() {
-    if date --version 2>/dev/null | grep -q "GNU"; then
-        return 0  # GNU date
-    else
-        return 1  # BSD date or other
+# ISO 8601 UTC 時刻 (例: "2026-01-01T00:00:00Z") を epoch 秒に変換
+# BSD date (-j -f) を優先し、フォールバックで GNU date (-d) を試す
+# どちらも失敗時は 1 を返す
+#
+# 注意: BSD date -j -f は format 中の Z をリテラル文字として扱い、入力をローカル
+# 時刻と解釈する。これだと JST 等で TZ オフセット分だけ epoch がずれる。
+# TZ=UTC を明示することで「UTC 時刻として解釈」させて正しい epoch を得る。
+parse_utc_to_epoch() {
+    local utc_time="$1" out=""
+    # BSD 優先 (macOS デフォルト)、TZ=UTC で UTC 解釈を強制
+    if out=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%s" 2>/dev/null); then
+        echo "$out"; return 0
     fi
+    # GNU フォールバック (Linux または macOS+brew coreutils 環境)
+    # GNU date -d は ISO 8601 の Z 接尾辞を正しく UTC として解釈する
+    if out=$(date -d "$utc_time" "+%s" 2>/dev/null); then
+        echo "$out"; return 0
+    fi
+    return 1
 }
 
-# UTC時刻をローカルタイムゾーンに変換
+# UTC 時刻をローカル時刻文字列に変換
+# 整形は bash 内蔵 printf %()T を使い、外部 date は epoch 変換のみで使用
 convert_utc_to_local() {
-    local utc_time="$1"
-    local local_time=""
-    local timezone_info
-    timezone_info=$(get_current_timezone)
-    
-    if is_gnu_date; then
-        # GNU date (Linux or GNU coreutils)
-        local_time=$(date -d "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-        if [ -n "$local_time" ]; then
-            echo "$local_time $timezone_info"
-        else
-            echo "$utc_time (GNU date変換失敗)"
-        fi
-    elif command -v gdate &> /dev/null; then
-        # GNU date installed as gdate (common on macOS with Homebrew)
-        local_time=$(gdate -d "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-        if [ -n "$local_time" ]; then
-            echo "$local_time $timezone_info"
-        else
-            echo "$utc_time (gdate変換失敗)"
-        fi
-    elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" &>/dev/null; then
-        # BSD date (macOS default, FreeBSD)
-        local_time=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$utc_time" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
-        if [ -n "$local_time" ]; then
-            echo "$local_time $timezone_info"
-        else
-            echo "$utc_time (BSD date変換失敗)"
-        fi
-    else
-        # フォールバック: 元の時刻にタイムゾーン情報を付加
-        echo "$utc_time (UTC) → ローカル変換不可、現在のTZ: $timezone_info"
+    local utc_time="$1" epoch
+    if ! epoch=$(parse_utc_to_epoch "$utc_time"); then
+        echo "$utc_time (変換不可: BSD/GNU date どちらも利用不可)"
+        return 1
     fi
+    # printf %()T は bash 4.2+ 内蔵、外部プロセス不要
+    printf '%(%Y-%m-%d %H:%M:%S %Z %z)T\n' "$epoch"
 }
 
 # プロファイル統計の表示
@@ -894,23 +881,12 @@ get_access_token() {
         local_expires=$(convert_utc_to_local "$expires_at")
         
         # 現在時刻と比較して有効性をチェック
-        local current_timestamp
-        local expires_timestamp
-        
-        if is_gnu_date; then
-            # GNU date (Linux or GNU coreutils)
-            current_timestamp=$(date +%s)
-            expires_timestamp=$(date -d "$expires_at" +%s 2>/dev/null || echo "0")
-        elif command -v gdate &> /dev/null; then
-            # GNU date installed as gdate (common on macOS with Homebrew)
-            current_timestamp=$(gdate +%s)
-            expires_timestamp=$(gdate -d "$expires_at" +%s 2>/dev/null || echo "0")
-        elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" &>/dev/null; then
-            # BSD date (macOS default, FreeBSD)
-            current_timestamp=$(date +%s)
-            expires_timestamp=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" 2>/dev/null || echo "0")
-        else
-            # タイムスタンプ比較をスキップ
+        # current は bash 内蔵で取得 (外部 date 不要)、expires のパースだけ parse_utc_to_epoch に委譲
+        local current_timestamp expires_timestamp
+        printf -v current_timestamp '%(%s)T' -1
+
+        if ! expires_timestamp=$(parse_utc_to_epoch "$expires_at"); then
+            # BSD/GNU date のどちらも使えない場合、判定をスキップ
             log_warning "セッション有効性の自動判定をスキップしました"
             echo "  有効期限: $local_expires"
             export ACCESS_TOKEN="$access_token"
@@ -1011,29 +987,17 @@ check_sso_session_status() {
         # 有効期限をローカルタイムゾーンで表示
         local local_expires
         local_expires=$(convert_utc_to_local "$expires_at")
-        
-        # 現在時刻と比較して有効性をチェック
-        local current_timestamp
-        local expires_timestamp
-        
-        if is_gnu_date; then
-            # GNU date (Linux or GNU coreutils)
-            current_timestamp=$(date +%s)
-            expires_timestamp=$(date -d "$expires_at" +%s 2>/dev/null || echo "0")
-        elif command -v gdate &> /dev/null; then
-            # GNU date installed as gdate (common on macOS with Homebrew)
-            current_timestamp=$(gdate +%s)
-            expires_timestamp=$(gdate -d "$expires_at" +%s 2>/dev/null || echo "0")
-        elif date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" &>/dev/null; then
-            # BSD date (macOS default, FreeBSD)
-            current_timestamp=$(date +%s)
-            expires_timestamp=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$expires_at" "+%s" 2>/dev/null || echo "0")
-        else
+
+        # 現在時刻 (bash 内蔵) と expires のパース (parse_utc_to_epoch) で比較
+        local current_timestamp expires_timestamp
+        printf -v current_timestamp '%(%s)T' -1
+
+        if ! expires_timestamp=$(parse_utc_to_epoch "$expires_at"); then
             log_warning "セッション有効性の自動判定をスキップしました"
             echo "  有効期限: $local_expires"
             return 0
         fi
-        
+
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
             echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"

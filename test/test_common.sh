@@ -39,12 +39,12 @@ echo "タイムゾーン: $timezone"
 echo "✅ テスト3完了"
 echo
 
-# テスト4: GNU dateの検出
-echo "テスト4: GNU dateの検出"
-if is_gnu_date; then
-    echo "GNU dateが検出されました"
+# テスト4: ISO 8601 UTC → epoch 変換 (parse_utc_to_epoch、BSD/GNU 両対応)
+echo "テスト4: parse_utc_to_epoch (UTC → epoch)"
+if epoch=$(parse_utc_to_epoch "2026-01-01T00:00:00Z"); then
+    echo "epoch: $epoch (BSD/GNU date のどちらかで成功)"
 else
-    echo "BSD dateまたはその他のdateコマンドが検出されました"
+    echo "❌ BSD/GNU date どちらも使えません"
 fi
 echo "✅ テスト4完了"
 echo

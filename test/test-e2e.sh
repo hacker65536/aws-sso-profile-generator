@@ -44,14 +44,10 @@ sso_registration_scopes = sso:account:access
 EOF
 
 # mock SSO アクセストークン (有効期限 +1h)
-# GNU date (-d) と BSD date (-v) の両対応
-if EXPIRES=$(date -u -d '+1 hour' '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null); then
-    :
-elif EXPIRES=$(date -u -v +1H '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null); then
-    :
-else
-    EXPIRES="2099-01-01T00:00:00Z"
-fi
+# bash 4.2+ 内蔵の printf %()T で外部 date 不要 (BSD/GNU 検出スキップ)
+_now_epoch=0
+printf -v _now_epoch '%(%s)T' -1
+TZ=UTC printf -v EXPIRES '%(%Y-%m-%dT%H:%M:%SZ)T' "$((_now_epoch + 3600))"
 
 cat > "$SANDBOX/.aws/sso/cache/test-token.json" <<EOF
 {
