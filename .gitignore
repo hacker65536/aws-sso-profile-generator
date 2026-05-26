@@ -18,3 +18,6 @@ commit-message*.txt
 
 # ログファイル
 *.log
+
+# AWS SSO API レスポンスのランタイムキャッシュ (実アカウントID/セッション情報を含むため)
+.aws-sso-cache/
