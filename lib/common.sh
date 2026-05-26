@@ -114,24 +114,49 @@ verify_marker_integrity() {
     return 0
 }
 
-# 古いバックアップを最新 N 世代に絞る
-# 引数: $1=設定ファイルパス, $2=保持世代数(省略時10)
-rotate_backups() {
-    local config_file="$1"
+# パターン (glob) にマッチするファイルを最新 N 件に絞る汎用関数
+# 引数: $1=glob パターン (例: "/path/to/files-*.log"), $2=保持件数 (省略時10), $3=ログ表示用ラベル
+rotate_files_by_pattern() {
+    local pattern="$1"
     local keep="${2:-10}"
+    local label="${3:-ファイル}"
 
     local removed
     # シェルグロブを使わず ls -t ベースで安全に列挙
-    # shellcheck disable=SC2012
-    removed=$(ls -t "${config_file}".backup.* 2>/dev/null | tail -n +"$((keep + 1))" || true)
+    # shellcheck disable=SC2012,SC2086
+    removed=$(ls -t $pattern 2>/dev/null | tail -n +"$((keep + 1))" || true)
     if [ -n "$removed" ]; then
         echo "$removed" | while IFS= read -r f; do
             [ -n "$f" ] && rm -f -- "$f"
         done
         local removed_count
         removed_count=$(echo "$removed" | grep -c . || true)
-        log_info "古いバックアップを ${removed_count} 個削除しました (保持: ${keep} 世代)"
+        log_info "古い${label}を ${removed_count} 個削除しました (保持: ${keep})"
     fi
+}
+
+# 古いバックアップを最新 N 世代に絞る (rotate_files_by_pattern の薄いラッパー)
+# 引数: $1=設定ファイルパス, $2=保持世代数(省略時10)
+rotate_backups() {
+    local config_file="$1"
+    local keep="${2:-10}"
+    rotate_files_by_pattern "${config_file}.backup.*" "$keep" "バックアップ"
+}
+
+# 設定ファイル内の AWS_SSO_CONFIG_GENERATOR ブロックからプロファイル名一覧を抽出
+# 引数: $1=設定ファイルパス
+# 出力: ソート済みプロファイル名 (1 行 1 件)
+extract_auto_profiles() {
+    local config_file="$1"
+    [ -f "$config_file" ] || return 0
+    awk '
+        /^# AWS_SSO_CONFIG_GENERATOR START/ { in_block=1; next }
+        /^# AWS_SSO_CONFIG_GENERATOR END/ { in_block=0; next }
+        in_block && /^\[profile / {
+            gsub(/^\[profile |\]$/, "")
+            print
+        }
+    ' "$config_file" | sort
 }
 
 # ============================================================================
