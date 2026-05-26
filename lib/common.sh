@@ -817,8 +817,10 @@ show_progress_with_counter() {
 show_progress_complete() {
     local total="$1"
     local message="${2:-完了}"
-    
-    printf "%s" "$ERASE_LINE"
+
+    # \r で column 0 に戻ってから行消去 → 完了行を描画
+    # (旧コードは \r 抜けで前回の cursor 位置から描画され、長い場合は折り返していた)
+    printf "\r%s" "$ERASE_LINE"
     printf "%s [████████████████████] %d/%d (100%%) %s\n" \
         "${GREEN}✅${RESET}" \
         "$total" \
