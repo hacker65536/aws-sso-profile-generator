@@ -48,9 +48,11 @@ log_debug() {
 LOG_FILE=""
 
 log_to_file() {
-    local message="$1"
     if [ -n "${LOG_FILE:-}" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] $message" >> "$LOG_FILE"
+        # bash 4.2+ 内蔵の printf %()T で date サブシェルを排除 (~12x 高速)
+        local ts
+        printf -v ts '%(%Y-%m-%d %H:%M:%S)T' -1
+        printf '[%s] %s\n' "$ts" "$1" >> "$LOG_FILE"
     fi
 }
 
