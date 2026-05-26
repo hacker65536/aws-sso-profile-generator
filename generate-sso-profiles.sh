@@ -278,22 +278,109 @@ generate_profiles_for_accounts() {
     local account_ids
     account_ids=$(echo "$accounts_subset" | grep -oE '^[0-9]+')
 
-    # xargs -P でワーカーを並列実行 (stdout/stderr はログへ集約)
-    # bash で明示的に呼ぶことで、ワーカーに +x が無くても動作する
-    echo "$account_ids" | xargs -P "$parallel" -I {} \
-        bash "$worker" {} "$roles_tmpdir" \
-        > "$xargs_log" 2>&1 &
-    local xargs_pid=$!
+    # === Pre-flight: 単一 batch stat で hit/miss 分類 ===
+    # 各 cache file を find/stat で 1 件ずつ確認すると 187 件で ~6 秒かかるため、
+    # bash でパス計算 (subshell ゼロ) + 単一 stat 呼び出しで全 mtime を一括取得する。
+    local session_hash
+    session_hash=$(cache_session_hash "$SSO_START_URL")
 
-    # 進捗ポーリング: tmpdir の完了ファイル数を 0.3 秒ごとに数える
-    while kill -0 "$xargs_pid" 2>/dev/null; do
-        local done_count
-        done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
-            \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
-        show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中"
-        sleep 0.3
+    local -a cache_paths=() account_array=()
+    local _aid
+    while IFS= read -r _aid; do
+        [ -z "$_aid" ] && continue
+        account_array+=("$_aid")
+        cache_paths+=("${CACHE_DIR}/roles-${_aid}-${session_hash}.json")
+    done <<< "$account_ids"
+
+    # 単一 stat 呼び出しで全ファイルの mtime を取得 (BSD/GNU 両対応)
+    # 存在しないファイルは出力されないため、後段の :-0 で自然に miss 扱いになる
+    local -A _mtimes=()
+    local _stat_path _stat_mtime
+    if stat -f '%N %m' /dev/null &>/dev/null; then
+        # BSD stat (macOS)
+        while IFS=' ' read -r _stat_path _stat_mtime; do
+            [ -n "$_stat_path" ] && [ -n "$_stat_mtime" ] && _mtimes["$_stat_path"]="$_stat_mtime"
+        done < <(stat -f '%N %m' "${cache_paths[@]}" 2>/dev/null || true)
+    else
+        # GNU stat (Linux)
+        while IFS=' ' read -r _stat_path _stat_mtime; do
+            [ -n "$_stat_path" ] && [ -n "$_stat_mtime" ] && _mtimes["$_stat_path"]="$_stat_mtime"
+        done < <(stat -c '%n %Y' "${cache_paths[@]}" 2>/dev/null || true)
+    fi
+
+    # TTL しきい値計算
+    local _now_epoch _ttl_sec _threshold
+    printf -v _now_epoch '%(%s)T' -1
+    _ttl_sec=$(awk -v h="${CACHE_EXPIRY_HOURS:-24}" 'BEGIN{printf "%d", h*3600}')
+    _threshold=$((_now_epoch - _ttl_sec))
+
+    # 分類 (subshell ゼロ)
+    local -a hit_list=() miss_list=()
+    local _i _path _mtime
+    for _i in "${!account_array[@]}"; do
+        _path="${cache_paths[$_i]}"
+        _mtime="${_mtimes[$_path]:-0}"
+        if [ "$_mtime" -ge "$_threshold" ]; then
+            hit_list+=("${account_array[$_i]}")
+        else
+            miss_list+=("${account_array[$_i]}")
+        fi
     done
-    wait "$xargs_pid" || true
+
+    local hit_n="${#hit_list[@]}" miss_n="${#miss_list[@]}"
+    log_to_file "Phase 2 pre-flight: hit=$hit_n miss=$miss_n"
+
+    # === Inline 並列処理: キャッシュヒットを軽量 bash -c で並列 (source common.sh 不要) ===
+    # worker (lib/fetch-account-roles.sh) は ~870 行の common.sh を毎回 source するため
+    # spawn コスト ~400ms。bash -c なら ~30-50ms で済み、cache hit ケースが大幅高速化。
+    if [ "$hit_n" -gt 0 ]; then
+        log_info "キャッシュヒット ${hit_n} アカウントを軽量並列で処理 (並列度 ${parallel})..."
+        export _CACHE_DIR_X="$CACHE_DIR"
+        export _SESSION_HASH_X="$session_hash"
+        export _ROLES_TMPDIR_X="$roles_tmpdir"
+
+        printf '%s\n' "${hit_list[@]}" | xargs -P "$parallel" -I {} \
+            bash -c '
+                aid="$1"
+                cf="${_CACHE_DIR_X}/roles-${aid}-${_SESSION_HASH_X}.json"
+                if jq -r ".roleList[].roleName" < "$cf" > "${_ROLES_TMPDIR_X}/${aid}.roles" 2>/dev/null; then
+                    printf "hit %s\n" "$aid"
+                else
+                    printf "%s\n" "ロール JSON 解析失敗" > "${_ROLES_TMPDIR_X}/${aid}.err"
+                    printf "err %s jq_parse_failed\n" "$aid"
+                fi
+            ' _ {} \
+            >> "$xargs_log" 2>&1 &
+        local inline_pid=$!
+
+        # 進捗ポーリング
+        while kill -0 "$inline_pid" 2>/dev/null; do
+            local done_count
+            done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
+                \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
+            show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中 (cache)"
+            sleep 0.3
+        done
+        wait "$inline_pid" || true
+    fi
+
+    # === Worker 並列処理: キャッシュ未ヒットのみ (フル機能の worker = API 呼び出し対応) ===
+    if [ "$miss_n" -gt 0 ]; then
+        log_info "キャッシュ未ヒット ${miss_n} アカウントを並列度 ${parallel} で取得中..."
+        printf '%s\n' "${miss_list[@]}" | xargs -P "$parallel" -I {} \
+            bash "$worker" {} "$roles_tmpdir" \
+            >> "$xargs_log" 2>&1 &
+        local xargs_pid=$!
+
+        while kill -0 "$xargs_pid" 2>/dev/null; do
+            local done_count
+            done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
+                \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
+            show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中 (API)"
+            sleep 0.3
+        done
+        wait "$xargs_pid" || true
+    fi
 
     show_progress_complete "$total_accounts" "ロール取得完了"
 
