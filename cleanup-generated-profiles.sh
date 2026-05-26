@@ -70,8 +70,10 @@ check_generated_profiles() {
 }
 
 # 自動生成プロファイルの削除
+# 引数: $1=config_file, $2=session_filter (省略可。指定時は特定セッションのみ削除)
 remove_generated_profiles() {
     local config_file="$1"
+    local session_filter="${2:-}"
 
     # マーカー整合性チェック（不一致なら sed による事故的全削除を防ぐ）
     if ! verify_marker_integrity "$config_file"; then
@@ -84,19 +86,49 @@ remove_generated_profiles() {
     cp "$config_file" "$backup_file"
     log_success "バックアップファイルを作成しました: $backup_file"
 
-    # 古いバックアップを最新 10 世代に絞る
     rotate_backups "$config_file" 10
 
-    log_info "自動生成プロファイルを削除中..."
+    if [ -n "$session_filter" ]; then
+        log_info "セッション '$session_filter' のプロファイルのみ削除中..."
+        # awk で AWS_SSO_CONFIG_GENERATOR ブロック内の特定セッションプロファイルのみ除外
+        awk -v session="$session_filter" '
+            BEGIN { in_block = 0; in_profile = 0; buf = ""; sess = "" }
+            /^# AWS_SSO_CONFIG_GENERATOR START/ { in_block = 1; print; next }
+            /^# AWS_SSO_CONFIG_GENERATOR END/ {
+                if (in_profile) {
+                    if (sess != session) printf "%s", buf
+                }
+                in_block = 0; in_profile = 0; buf = ""; sess = ""
+                print; next
+            }
+            in_block && /^\[profile / {
+                # 前のプロファイルを flush
+                if (in_profile && sess != session) printf "%s", buf
+                buf = $0 "\n"
+                sess = ""
+                in_profile = 1
+                next
+            }
+            in_block && in_profile {
+                buf = buf $0 "\n"
+                if ($0 ~ /^sso_session[[:space:]]*=/) {
+                    s = $0
+                    sub(/^sso_session[[:space:]]*=[[:space:]]*/, "", s)
+                    sub(/[[:space:]]+$/, "", s)
+                    sess = s
+                }
+                next
+            }
+            { print }
+        ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
+    else
+        log_info "自動生成プロファイルを削除中..."
+        # AWS_SSO_CONFIG_GENERATOR で囲まれたブロックを丸ごと削除
+        sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
+        rm -f "${config_file}.tmp"
+    fi
 
-    # AWS_SSO_CONFIG_GENERATOR で囲まれたブロックを削除
-    # sedを使用してSTARTからENDまでのブロックを削除
-    sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
-
-    # 一時ファイルを削除
-    rm -f "${config_file}.tmp"
-
-    # sed が残す末尾空行を整理 (空行累積を防ぐ)
+    # 末尾空行を整理 (空行累積を防ぐ)
     trim_trailing_empty_lines "$config_file"
 
     log_success "自動生成プロファイルを削除しました"
@@ -126,15 +158,25 @@ verify_cleanup() {
 # メイン実行
 main() {
     local dry_run=false
+    local session_filter=""
     while [[ $# -gt 0 ]]; do
         case $1 in
             --dry-run)
                 dry_run=true
                 shift
                 ;;
+            --session)
+                if [ $# -lt 2 ]; then
+                    log_error "--session には session name が必要です"
+                    exit 1
+                fi
+                session_filter="$2"
+                shift 2
+                ;;
             --help|-h)
-                echo "使用方法: $0 [--dry-run] [--help]"
-                echo "  --dry-run  削除予定のプロファイルを表示するだけで実ファイルは変更しない"
+                echo "使用方法: $0 [--dry-run] [--session NAME] [--help]"
+                echo "  --dry-run         削除予定のプロファイルを表示するだけで実ファイルは変更しない"
+                echo "  --session NAME    指定 SSO セッションのプロファイルのみ削除"
                 exit 0
                 ;;
             *)
@@ -198,7 +240,7 @@ main() {
     echo
 
     # プロファイル削除の実行
-    remove_generated_profiles "$config_file"
+    remove_generated_profiles "$config_file" "$session_filter"
 
     echo
 

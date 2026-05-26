@@ -24,7 +24,14 @@ cleanup_temp_files() {
     for d in "${TEMP_DIRS[@]:-}"; do
         rm -rf "$d"
     done
+    # カーソル表示を確実に戻す (スピナーで非表示にしていた場合)
+    printf "%s" "${SHOW_CURSOR:-}" 2>/dev/null || true
+    # advisory lock を解放 (取得していなければ no-op)
+    type -t release_lock >/dev/null 2>&1 && release_lock || true
 }
+# Ctrl+C / kill 受信時もクリーンアップして適切に終了
+trap 'cleanup_temp_files; echo; log_warning "中断されました"; exit 130' INT
+trap 'cleanup_temp_files; echo; log_warning "終了シグナルを受信しました"; exit 143' TERM
 trap cleanup_temp_files EXIT
 
 
@@ -230,9 +237,28 @@ generate_profiles_for_accounts() {
         return 1
     fi
 
+    # --account-filter が指定されていれば accounts_data を絞る (glob マッチ)
+    if [ -n "${ACCOUNT_FILTER:-}" ]; then
+        local _filtered
+        _filtered=$(echo "$accounts_data" | awk -v pat="$ACCOUNT_FILTER" '
+            BEGIN { gsub(/[.+]/, "\\&", pat); gsub(/\*/, ".*", pat); gsub(/\?/, ".", pat); pat = "^" pat "$" }
+            { name = $0; sub(/^[0-9]+ /, "", name); if (name ~ pat) print }
+        ')
+        local _before _after
+        _before=$(echo "$accounts_data" | grep -c . 2>/dev/null || true)
+        _after=$(echo "$_filtered" | grep -c . 2>/dev/null || true)
+        log_info "--account-filter '$ACCOUNT_FILTER' でアカウントを絞り込み: ${_before:-0} → ${_after:-0}"
+        accounts_data="$_filtered"
+    fi
+
     # アカウント数をカウントし、max_accounts で絞る
     local total_accounts
-    total_accounts=$(echo "$accounts_data" | wc -l | tr -d ' ')
+    total_accounts=$(echo "$accounts_data" | grep -c . 2>/dev/null || true)
+    total_accounts=${total_accounts:-0}
+    if [ "$total_accounts" -eq 0 ]; then
+        log_error "対象アカウントが 0 件です (--account-filter のパターンを確認してください)"
+        return 1
+    fi
     if [ "$total_accounts" -gt "$max_accounts" ]; then
         total_accounts="$max_accounts"
     fi
@@ -452,6 +478,11 @@ generate_profiles_for_accounts() {
             local role_count=0
             while IFS= read -r role_name; do
                 if [ -n "$role_name" ]; then
+                    # --role-filter が指定されていればロール名で絞り込み (bash パターンマッチ)
+                    # shellcheck disable=SC2053  # 右辺は glob として展開させる意図的な使い方
+                    if [ -n "${ROLE_FILTER:-}" ] && [[ ! "$role_name" == ${ROLE_FILTER} ]]; then
+                        continue
+                    fi
                     local profile_name
                     profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
                     if [ "$dry_run" != true ]; then
@@ -589,6 +620,8 @@ show_usage() {
     echo "  --refresh-cache     既存キャッシュを削除してから API を再取得"
     echo "  --parallel N        並列度 (省略時 PARALLEL 環境変数または 8)"
     echo "  --dry-run           設定ファイルを変更せず、生成予定のプロファイルだけ表示"
+    echo "  --account-filter PATTERN  アカウント名を glob で絞り込み (例: 'prod-*')"
+    echo "  --role-filter PATTERN     ロール名を glob で絞り込み (例: 'AWSReadOnly*')"
     echo
     echo "例:"
     echo "  $0                  # 対話モードで実行"
@@ -668,6 +701,22 @@ main() {
                 dry_run=true
                 shift
                 ;;
+            --account-filter)
+                if [ $# -lt 2 ]; then
+                    log_error "--account-filter には glob パターンを指定してください (例: 'prod-*')"
+                    exit 1
+                fi
+                export ACCOUNT_FILTER="$2"
+                shift 2
+                ;;
+            --role-filter)
+                if [ $# -lt 2 ]; then
+                    log_error "--role-filter には glob パターンを指定してください (例: 'AWSReadOnly*')"
+                    exit 1
+                fi
+                export ROLE_FILTER="$2"
+                shift 2
+                ;;
             --parallel)
                 if [ $# -lt 2 ]; then
                     log_error "--parallel には数値引数が必要です"
@@ -693,6 +742,15 @@ main() {
     echo "🔄 AWS SSO プロファイル自動生成"
     echo "==============================="
     echo
+
+    # 並行実行ガード (mkdir ベース advisory lock)
+    # ~/.aws/.aws-sso-pg.lock があれば二重起動とみなし即座に終了
+    if ! acquire_lock; then
+        log_error "他のプロセスが実行中です (ロックディレクトリ: \$HOME/.aws/.aws-sso-pg.lock)"
+        log_info "別のターミナルで generate-sso-profiles.sh が動作中の可能性があります"
+        log_info "強制解除する場合: rm -rf \"\$HOME/.aws/.aws-sso-pg.lock\""
+        exit 1
+    fi
 
     if [ "$force_mode" = true ]; then
         log_info "フォースモード: デフォルト値で自動実行します"

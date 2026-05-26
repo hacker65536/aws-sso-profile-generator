@@ -114,6 +114,44 @@ verify_marker_integrity() {
     return 0
 }
 
+# 並行実行を防ぐためのディレクトリベース advisory lock を取得
+# 引数: $1=lock_dir (省略時 $HOME/.aws/.aws-sso-pg.lock)
+# 戻り値: 0=取得成功, 1=既にロック中
+# 注意: 取得後は呼び出し側が release_lock を呼ぶ責務がある (trap で確実に解放)
+LOCK_DIR=""
+acquire_lock() {
+    local lock="${1:-$HOME/.aws/.aws-sso-pg.lock}"
+    # mkdir は atomic operation (POSIX 保証)。既存ディレクトリには失敗する
+    if mkdir "$lock" 2>/dev/null; then
+        LOCK_DIR="$lock"
+        # stale lock 検出用に pid を残す
+        echo "$$" > "$lock/pid" 2>/dev/null || true
+        return 0
+    fi
+    # 既存ロックの pid が生きているか確認
+    local stale_pid
+    stale_pid=$(cat "$lock/pid" 2>/dev/null || echo "")
+    if [ -n "$stale_pid" ] && ! kill -0 "$stale_pid" 2>/dev/null; then
+        # プロセスが死んでいる → stale lock として除去して再取得
+        log_warning "古いロック (pid=$stale_pid, 既に終了) を検出、削除して再試行します"
+        rm -rf "$lock" 2>/dev/null || true
+        if mkdir "$lock" 2>/dev/null; then
+            LOCK_DIR="$lock"
+            echo "$$" > "$lock/pid" 2>/dev/null || true
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# ロックを解放する (acquire_lock 後に必ず呼ぶこと)
+release_lock() {
+    if [ -n "$LOCK_DIR" ] && [ -d "$LOCK_DIR" ]; then
+        rm -rf "$LOCK_DIR" 2>/dev/null || true
+        LOCK_DIR=""
+    fi
+}
+
 # パターン (glob) にマッチするファイルを最新 N 件に絞る汎用関数
 # 引数: $1=glob パターン (例: "/path/to/files-*.log"), $2=保持件数 (省略時10), $3=ログ表示用ラベル
 rotate_files_by_pattern() {
