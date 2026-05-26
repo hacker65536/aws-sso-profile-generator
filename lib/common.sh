@@ -143,6 +143,14 @@ rotate_backups() {
     rotate_files_by_pattern "${config_file}.backup.*" "$keep" "バックアップ"
 }
 
+# "[profile NAME]" の行からプロファイル名 (NAME) を抽出する
+# stdin から入力された行のうち [profile *] にマッチするもののみを抽出
+# 引数: なし (stdin から読む)
+# 出力: プロファイル名 (1 行 1 件)
+extract_profile_names() {
+    sed -n 's/^\[profile \(.*\)\]$/\1/p'
+}
+
 # ファイル末尾の連続する空行を除去する (内容中の空行は保持)
 # 引数: $1=対象ファイルパス
 # 目的: マーカーブロック削除後の sed が残す末尾空行を整理し、
@@ -933,9 +941,8 @@ get_access_token() {
         fi
         
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
-            echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"
-            show_sso_login_command "$SSO_SESSION_NAME"
+            show_sso_login_command "$SSO_SESSION_NAME" "$local_expires"
             return 1
         else
             log_success "有効なアクセストークンを取得しました"
@@ -950,22 +957,29 @@ get_access_token() {
 }
 
 # SSO ログインコマンドの表示
+# 引数: $1=session_name (省略可), $2=expires_at (省略可、表示用)
 show_sso_login_command() {
-    local session_name="$1"
-    
-    if [ -n "$session_name" ]; then
-        log_info "以下のコマンドでSSO ログインを実行してください:"
-        echo "  aws sso login --sso-session $session_name"
-        echo
-        log_info "ブラウザが利用できない環境の場合:"
-        echo "  aws sso login --sso-session $session_name --use-device-code"
-    else
-        log_info "以下のコマンドでSSO ログインを実行してください:"
-        echo "  aws sso login --sso-session <session-name>"
-        echo
-        log_info "ブラウザが利用できない環境の場合:"
-        echo "  aws sso login --sso-session <session-name> --use-device-code"
+    local session_name="${1:-}"
+    local expires_at="${2:-}"
+
+    if [ -n "$expires_at" ]; then
+        log_warning "  有効期限: $expires_at"
     fi
+
+    echo
+    log_info "▶ 次のコマンドで再ログインしてください:"
+    if [ -n "$session_name" ]; then
+        echo "    aws sso login --sso-session $session_name"
+        echo "    # ブラウザが使えない環境では --use-device-code を付加"
+    else
+        echo "    aws sso login --sso-session <session-name>"
+    fi
+    echo
+    log_info "▶ ログイン後、このスクリプトを再実行してください:"
+    # $0 が空 (source 時など) の場合はスクリプト名を fallback
+    local script_name="${BASH_SOURCE[1]##*/}"
+    [ -z "$script_name" ] && script_name="generate-sso-profiles.sh"
+    echo "    ./${script_name}"
 }
 
 # SSO セッション状態チェック
@@ -1038,9 +1052,8 @@ check_sso_session_status() {
         fi
 
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
-            echo "  有効期限: $local_expires"
             log_error "SSO セッションが期限切れです"
-            show_sso_login_command "$session_name"
+            show_sso_login_command "$session_name" "$local_expires"
             return 1
         else
             log_success "SSO セッションが有効です"

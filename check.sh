@@ -16,6 +16,7 @@ show_usage() {
     echo "  aws-config                    AWS設定ファイルの確認"
     echo "  sso-config [SESSION_NAME]     SSO設定の確認"
     echo "  sso-profiles [SUBCOMMAND]     SSOプロファイルの分析"
+    echo "  cache [SUBCOMMAND]            キャッシュの統計表示・削除・検証"
     echo "  help, -h, --help              このヘルプを表示"
     echo
     echo "sso-profiles のサブコマンド:"
@@ -23,6 +24,11 @@ show_usage() {
     echo "  auto [--all]          自動生成プロファイルの詳細表示"
     echo "  manual [--all]        手動管理プロファイルの詳細表示"
     echo "  duplicates            重複プロファイルの詳細チェック"
+    echo
+    echo "cache のサブコマンド:"
+    echo "  stats                 キャッシュ統計を表示 (デフォルト)"
+    echo "  clear [SESSION]       全キャッシュ or セッション単位で削除"
+    echo "  validate              期限切れファイルを一覧"
     echo
     echo "例:"
     echo "  $0                          # 全ての環境チェック"
@@ -32,6 +38,8 @@ show_usage() {
     echo "  $0 sso-config my-session    # 特定セッションの確認"
     echo "  $0 sso-profiles             # プロファイル分析"
     echo "  $0 sso-profiles auto --all  # 自動生成プロファイルを全件表示"
+    echo "  $0 cache                    # キャッシュ統計"
+    echo "  $0 cache clear              # 全キャッシュ削除"
 }
 
 run_all() {
@@ -78,6 +86,10 @@ case "${1:-}" in
     "sso-profiles")
         shift
         exec "$SCRIPT_DIR/lib/check-sso-profiles.sh" "$@"
+        ;;
+    "cache")
+        shift
+        exec bash "$SCRIPT_DIR/lib/check-cache.sh" "$@"
         ;;
     "help" | "-h" | "--help")
         show_usage

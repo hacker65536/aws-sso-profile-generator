@@ -94,7 +94,7 @@ check_duplicate_profiles() {
     
     # 全プロファイル名を取得
     local all_profiles
-    all_profiles=$(grep "^\[profile " "$config_file" 2>/dev/null | sed 's/\[profile \(.*\)\]/\1/' | sort)
+    all_profiles=$(extract_profile_names < "$config_file" 2>/dev/null | sort)
     
     if [ -z "$all_profiles" ]; then
         return 0
@@ -240,7 +240,7 @@ analyze_profiles() {
                     local block_section
                     block_section=$(safe_sed_range "$block_start" "$block_end" "$config_file")
                     local block_profile_names
-                    block_profile_names=$(echo "$block_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/')
+                    block_profile_names=$(echo "$block_section" | extract_profile_names)
                     if [ -n "$all_profile_names" ]; then
                         all_profile_names="$all_profile_names"$'\n'"$block_profile_names"
                     else
@@ -279,7 +279,7 @@ analyze_profiles() {
                 local abs=${ab_start_array[j]}
                 local abe=${ab_end_array[j]}
                 if [ -n "$abs" ] && [ -n "$abe" ]; then
-                    safe_sed_range "$abs" "$abe" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' >> "$auto_profiles_file"
+                    safe_sed_range "$abs" "$abe" "$config_file" | extract_profile_names >> "$auto_profiles_file"
                 fi
             done
         fi
@@ -289,7 +289,7 @@ analyze_profiles() {
 
         # 全プロファイル名を取得
         local all_profiles
-        all_profiles=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/')
+        all_profiles=$(extract_profile_names < "$config_file")
 
         # 手動管理プロファイル名を抽出（自動生成以外）
         echo "$all_profiles" | while IFS= read -r profile_name; do
@@ -413,7 +413,7 @@ show_auto_generated_details() {
             local block_section
             block_section=$(safe_sed_range "$block_start" "$block_end" "$config_file")
             local block_profile_names
-            block_profile_names=$(echo "$block_section" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/')
+            block_profile_names=$(echo "$block_section" | extract_profile_names)
             if [ -n "$all_profile_names" ]; then
                 all_profile_names="$all_profile_names"$'\n'"$block_profile_names"
             else
@@ -523,7 +523,7 @@ show_manual_profiles_details() {
                 local block_start=${start_array[i]}
                 local block_end=${end_array[i]}
                 if [ -n "$block_start" ] && [ -n "$block_end" ]; then
-                    safe_sed_range "$block_start" "$block_end" "$config_file" | grep "^\[profile " | sed 's/\[profile \(.*\)\]/\1/' >> "$auto_profiles_file"
+                    safe_sed_range "$block_start" "$block_end" "$config_file" | extract_profile_names >> "$auto_profiles_file"
                 fi
             done
         fi
@@ -542,7 +542,7 @@ show_manual_profiles_details() {
         fi
         
         local all_profile_names
-        all_profile_names=$(grep "^\[profile " "$config_file" | sed 's/\[profile \(.*\)\]/\1/')
+        all_profile_names=$(extract_profile_names < "$config_file")
 
         local write_count=0
         while IFS= read -r profile_name; do
