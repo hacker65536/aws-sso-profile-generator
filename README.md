@@ -306,7 +306,7 @@ full:     'my_perfect_web_service_prod'
 
 ### キャッシュ機能
 
-SSO API レスポンスを `.aws-sso-cache/` にキャッシュし、2 回目以降のプロファイル生成を高速化します（200 アカウント環境で 200 秒 → 2 秒）。
+SSO API レスポンスを `.aws-sso-cache/` にキャッシュし、2 回目以降のプロファイル生成を劇的に高速化します（実機 187 アカウントで **38 秒 → 2.4 秒**、約 16 倍）。
 
 - デフォルト TTL: 24 時間
 - 環境変数 `CACHE_DIR` / `CACHE_EXPIRY_HOURS` で上書き可能
@@ -316,7 +316,7 @@ SSO API レスポンスを `.aws-sso-cache/` にキャッシュし、2 回目以
 
 ### 並列処理
 
-`list-account-roles` をアカウント単位で並列実行することで初回実行も高速化します（200 アカウント環境で 200 秒 → 25 秒）。
+`list-account-roles` をアカウント単位で並列実行することで初回実行も高速化します。
 
 ```bash
 # デフォルト並列度 8
@@ -330,8 +330,23 @@ PARALLEL=4 ./generate-sso-profiles.sh
 ```
 
 - デフォルト並列度: 8（AWS SSO Portal API の経験的安全圏 5-10 の中央値）
-- 並列度を上げすぎると AWS API のレート制限 (`TooManyRequestsException`) を踏みやすくなります
-- 並列化 + キャッシュにより、初回 25 秒・2 回目以降 2 秒の動作が可能
+- 並列度を上げすぎても AWS Portal API は内部でスループット制限される（実測 ~6 calls/sec が天井）
+- 並列化 + キャッシュにより、初回 ~38 秒・2 回目以降 ~2.4 秒の動作が可能（実機 187 アカウント）
+
+### ベンチマーク（実機 187 アカウント / 596 profiles, AWS Portal API）
+
+| シナリオ | 所要時間 | 倍速 (vs シリアル) |
+|---|---|---|
+| **Warm cache (parallel=8)** ⭐ | **2.4 秒** | 75x |
+| Cold cache (parallel=24, 上限) | 32 秒 | 5.6x |
+| Cold cache (parallel=16) | 34 秒 | 5.4x |
+| **Cold cache (parallel=8, デフォルト)** ⭐ | **38 秒** | 4.8x |
+| Cold cache (parallel=4) | 53 秒 | 3.4x |
+| Cold cache (parallel=1, シリアル) | 179 秒 | 1.0x |
+
+- 実測 AWS Portal API レイテンシ: **~0.95 秒/call**
+- AWS スループット上限: **~6 calls/sec**（parallel=16+ で頭打ち）
+- 並列度 8 で天井の 80% 達成、リスク低
 
 ## 設定例
 
@@ -567,6 +582,16 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+- **v1.18.0** - Phase 2 大幅高速化 + フェーズ別 timing + portability 改善
+  - **キャッシュヒット時の Phase 2 を 10x 高速化** (warm cache 18.5s → 2.4s)
+    - Pre-flight 分類を単一 batch stat 化 (`is_cache_valid × 187` → 1 stat call)
+    - キャッシュヒットは worker spawn せず軽量 `bash -c` で並列処理 (source common.sh 不要)
+  - **フェーズ別 timing 計測を追加** (`[TIMING] Phase 1/2/3/TOTAL` ログ + 終了時サマリ表示)
+    - bash 5+ の `EPOCHREALTIME` 活用、`perf_now` / `perf_diff` ヘルパー
+  - **portability 改善**: BSD/GNU date の 3 分岐を統合、bash 内蔵 `printf %()T` で外部依存最小化
+    - `parse_utc_to_epoch` 共通関数化、BSD `date -j -f` の `TZ=UTC` バグも修正
+    - `is_gnu_date` 削除（不要に）
+  - 実機 187 アカウント / 596 profiles でベンチマーク取得 (詳細は機能詳細セクション)
 - **v1.17.0** - パフォーマンスチューニング (subshell 削減)
   - `log_to_file` の `$(date ...)` を bash 内蔵 `printf %()T` に置換 (約 12x 高速)
   - `normalize_account_name_full/minimal` の `echo | sed | sed` を pure bash パラメータ展開に置換
