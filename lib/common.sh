@@ -32,7 +32,7 @@ log_kv() {
 
 # ログ出力関数
 log_info() {
-    echo -e "${BLUE}ℹ️  $1${NC}"
+    echo -e "${BLUE}ℹ️ $1${NC}"
 }
 
 log_success() {
@@ -40,7 +40,7 @@ log_success() {
 }
 
 log_warning() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
+    echo -e "${YELLOW}⚠️ $1${NC}"
 }
 
 log_error() {

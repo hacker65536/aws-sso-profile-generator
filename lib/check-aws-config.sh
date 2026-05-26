@@ -23,7 +23,7 @@ check_region_config() {
 
     # 2. AWS CLI設定の確認
     echo
-    echo "⚙️  Region from AWS CLI configuration:"
+    echo "⚙️ Region from AWS CLI configuration:"
     if command -v aws &> /dev/null; then
         local cli_region
         cli_region=$(unset AWS_PROFILE; aws configure get region 2>/dev/null || echo "unset")

@@ -106,7 +106,7 @@ check_duplicate_profiles() {
     
     if [ -n "$duplicates" ]; then
         echo
-        echo "⚠️  Duplicate profiles detected:"
+        echo "⚠️ Duplicate profiles detected:"
         local duplicate_count
         duplicate_count=$(echo "$duplicates" | wc -l | tr -d ' ')
         echo "  Duplicate count: $duplicate_count"

@@ -187,9 +187,9 @@ main() {
     done
 
     if [ "$dry_run" = true ]; then
-        echo "🗑️  AWS SSO Auto-generated Profile Cleanup (DRY-RUN)"
+        echo "🗑️ AWS SSO Auto-generated Profile Cleanup (DRY-RUN)"
     else
-        echo "🗑️  AWS SSO Auto-generated Profile Cleanup"
+        echo "🗑️ AWS SSO Auto-generated Profile Cleanup"
     fi
     echo "====================================="
     echo
