@@ -306,7 +306,32 @@ full:     'my_perfect_web_service_prod'
 
 ### キャッシュ機能
 
-SSO API レスポンスを `.aws-sso-cache/` にキャッシュし、2 回目以降のプロファイル生成を高速化します。詳細・トラブルシューティング・カスタマイズは [CACHE_USAGE.md](CACHE_USAGE.md) を参照してください。
+SSO API レスポンスを `.aws-sso-cache/` にキャッシュし、2 回目以降のプロファイル生成を高速化します（200 アカウント環境で 200 秒 → 2 秒）。
+
+- デフォルト TTL: 24 時間
+- 環境変数 `CACHE_DIR` / `CACHE_EXPIRY_HOURS` で上書き可能
+- `--refresh-cache` フラグでキャッシュ強制無効化
+
+詳細・トラブルシューティング・カスタマイズは [CACHE_USAGE.md](CACHE_USAGE.md) を参照してください。
+
+### 並列処理
+
+`list-account-roles` をアカウント単位で並列実行することで初回実行も高速化します（200 アカウント環境で 200 秒 → 25 秒）。
+
+```bash
+# デフォルト並列度 8
+./generate-sso-profiles.sh
+
+# 並列度を指定
+./generate-sso-profiles.sh --parallel 16
+
+# 環境変数でも指定可能 (--parallel フラグが優先)
+PARALLEL=4 ./generate-sso-profiles.sh
+```
+
+- デフォルト並列度: 8（AWS SSO Portal API の経験的安全圏 5-10 の中央値）
+- 並列度を上げすぎると AWS API のレート制限 (`TooManyRequestsException`) を踏みやすくなります
+- 並列化 + キャッシュにより、初回 25 秒・2 回目以降 2 秒の動作が可能
 
 ## 設定例
 
@@ -542,6 +567,19 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+- **v1.16.0** - キャッシュ機構と並列処理の実装
+  - `lib/common.sh` にキャッシュ層 (`get_cached_accounts` / `get_cached_roles` 等) を実装
+  - `list-account-roles` を `xargs -P` でアカウント単位に並列化 (`lib/fetch-account-roles.sh`)
+  - `--refresh-cache` / `--parallel N` フラグを `generate-sso-profiles.sh` に追加
+  - 200 アカウント環境で初回 200s → 25s、2 回目以降 2s に短縮
+  - `test/test-cache.sh` が動作可能になり、架空ドキュメント状態を解消
+- **v1.15.0** - 事故防止のための安全対策強化とリポジトリ整理
+  - 全スクリプトに `set -euo pipefail` を統一
+  - START/END マーカー整合性チェックを追加
+  - バックアップ 10 世代ローテーション
+  - shellcheck GitHub Actions ワークフロー追加
+  - 未追跡ファイル整理 (`.aws-sso-cache/` を `.gitignore` に追加等)
+- **v1.14.0** - バグ修正: unbound variable・grep -c 二重出力・スピナー描画順序
 - **v1.12.0** - ディレクトリ構造のリファクタリング
   - 内部スクリプトを `lib/` ディレクトリに集約
   - `check-environment.sh` を `check.sh` に統合・リネーム（サブコマンド形式）
