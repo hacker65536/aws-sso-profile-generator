@@ -710,6 +710,8 @@ main() {
     LOG_FILE="${HOME}/.aws/sso-profile-generator-$(date +%Y%m%d_%H%M%S).log"
     echo "# AWS SSO Profile Generator Log - $(get_current_datetime)" > "$LOG_FILE"
     log_info "ログファイル: $LOG_FILE"
+    # ログファイルローテーション (最新 N 件保持、デフォルト 30)
+    rotate_files_by_pattern "${HOME}/.aws/sso-profile-generator-*.log" "${LOG_KEEP_COUNT:-30}" "ログファイル"
 
     # 設定ファイルの取得
     local config_file
