@@ -172,6 +172,9 @@ sso_registration_scopes = sso:account:access
 
 - `--help`, `-h`: 詳細なヘルプメッセージを表示
 - `--force`, `-f`: デフォルト値で自動実行（対話なし）
+- `--refresh-cache`: 既存キャッシュを削除してから API を再取得
+- `--parallel N`: ロール取得の並列度を指定（既定 8、または環境変数 `PARALLEL`）
+- `--dry-run`: 設定ファイルを変更せず、生成予定のプロファイルを表示するだけ
 
 #### デフォルト設定（--force モード）
 
@@ -582,6 +585,15 @@ aws_profile_with_preview() {
 
 ## 更新履歴
 
+- **v1.19.0** - UX 改善: `--dry-run` / Diff 表示 / ログローテーション
+  - `--dry-run` フラグ: 設定ファイルを変更せず、生成予定のプロファイルだけ表示
+    (generate-sso-profiles.sh と cleanup-generated-profiles.sh 両方)
+  - 再生成時の Diff 表示: 「+ N 件追加 / - N 件削除 / = N 件変更なし」
+    (前回の自動生成ブロックと今回を `extract_auto_profiles` で比較)
+  - 実行ログのローテーション: `~/.aws/sso-profile-generator-*.log` を最新 30 件保持
+    (環境変数 `LOG_KEEP_COUNT` で上書き可能)
+  - 共通関数を整理: `rotate_files_by_pattern` 新設、`rotate_backups` はラッパー化
+  - E2E テストを 11 → 15 アサーションに拡張 (dry-run の md5 不変、diff "変更なし"検証等)
 - **v1.18.0** - Phase 2 大幅高速化 + フェーズ別 timing + portability 改善
   - **キャッシュヒット時の Phase 2 を 10x 高速化** (warm cache 18.5s → 2.4s)
     - Pre-flight 分類を単一 batch stat 化 (`is_cache_valid × 187` → 1 stat call)

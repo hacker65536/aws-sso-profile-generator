@@ -235,6 +235,46 @@ profile_count_3=$(grep -c "^\[profile awssso-" "$AWS_CONFIG_FILE" 2>/dev/null ||
 assert "refresh 後もプロファイル数 16" [ "$profile_count_3" -eq 16 ]
 
 # ============================================================================
+# Test 4: --dry-run モード (設定ファイル変更なしを md5 で確認)
+# ============================================================================
+
+echo
+echo "Test 4: --dry-run モード (設定ファイル変更なしを確認)"
+
+# 現在の config の md5 を保存
+md5_before=$(md5 -q "$AWS_CONFIG_FILE" 2>/dev/null || md5sum "$AWS_CONFIG_FILE" | awk '{print $1}')
+
+SECONDS=0
+if bash generate-sso-profiles.sh --force --dry-run --parallel 8 > "$RUN_LOG" 2>&1; then
+    echo "  ⏱  実行時間: ${SECONDS} 秒"
+else
+    echo "  ❌ --dry-run 実行が異常終了"
+    tail -20 "$RUN_LOG" | sed 's/^/    > /'
+    FAIL=$((FAIL + 1))
+fi
+
+md5_after=$(md5 -q "$AWS_CONFIG_FILE" 2>/dev/null || md5sum "$AWS_CONFIG_FILE" | awk '{print $1}')
+
+assert "--dry-run で config の md5 が不変" [ "$md5_before" = "$md5_after" ]
+assert "--dry-run 出力に DRY-RUN マーカーが含まれる" grep -q "DRY-RUN" "$RUN_LOG"
+assert "--dry-run プレビューに 16 件と表示される" grep -q "16 個のプロファイルが生成される予定" "$RUN_LOG"
+
+# ============================================================================
+# Test 5: Diff 表示 (再実行で「変更なし」と出る)
+# ============================================================================
+
+echo
+echo "Test 5: Diff 表示 (連続再実行で変更なし期待)"
+
+if bash generate-sso-profiles.sh --force --parallel 8 > "$RUN_LOG" 2>&1; then
+    :
+else
+    echo "  ❌ Test 5 実行が異常終了"
+    FAIL=$((FAIL + 1))
+fi
+assert "Diff: 前回と同一 (変更なし)" grep -q "前回と同一" "$RUN_LOG"
+
+# ============================================================================
 # 結果サマリ
 # ============================================================================
 
