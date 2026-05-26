@@ -200,8 +200,13 @@ generate_profiles_for_accounts() {
     local max_accounts="$3"
     local region="$4"
     local normalization_type="$5"
+    local dry_run="${6:-false}"
 
-    log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
+    if [ "$dry_run" = true ]; then
+        log_info "DRY-RUN モード: 最大 $max_accounts アカウント分のプレビューを表示します..."
+    else
+        log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
+    fi
 
     # 全体計測の開始
     local t_total_start
@@ -228,20 +233,23 @@ generate_profiles_for_accounts() {
     accounts_subset=$(echo "$accounts_data" | head -n "$total_accounts")
 
     # ---------- 設定ファイルの準備 (バックアップ + 既存ブロック削除) ----------
-    if [ -f "$config_file" ]; then
-        local backup_file
-        backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
-        cp "$config_file" "$backup_file"
-        log_info "設定ファイルをバックアップしました: $backup_file"
-        rotate_backups "$config_file" 10
-    fi
+    # dry_run の場合、設定ファイルへの書き込みは一切行わない
+    if [ "$dry_run" != true ]; then
+        if [ -f "$config_file" ]; then
+            local backup_file
+            backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
+            cp "$config_file" "$backup_file"
+            log_info "設定ファイルをバックアップしました: $backup_file"
+            rotate_backups "$config_file" 10
+        fi
 
-    if ! remove_generated_blocks "$config_file"; then
-        log_error "既存ブロックの削除に失敗したため生成処理を中止します"
-        return 1
-    fi
+        if ! remove_generated_blocks "$config_file"; then
+            log_error "既存ブロックの削除に失敗したため生成処理を中止します"
+            return 1
+        fi
 
-    add_batch_start_comment "$config_file"
+        add_batch_start_comment "$config_file"
+    fi
 
     # ---------- Phase 2: ロール取得を並列化 ----------
     local roles_tmpdir xargs_log script_dir worker parallel
@@ -415,6 +423,7 @@ generate_profiles_for_accounts() {
     local count=0
     local total_profiles=0
     local failed_accounts=()
+    local generated_profiles=()   # dry-run および diff 用に生成プロファイル名を蓄積
 
     while IFS= read -r line; do
         # pure bash パラメータ展開 (echo | grep の subshell 排除)
@@ -437,7 +446,10 @@ generate_profiles_for_accounts() {
                 if [ -n "$role_name" ]; then
                     local profile_name
                     profile_name=$(generate_profile_name "$prefix" "$account_name" "$account_id" "$role_name" "$normalization_type")
-                    create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                    if [ "$dry_run" != true ]; then
+                        create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
+                    fi
+                    generated_profiles+=("$profile_name")
                     log_to_file "✅ プロファイル作成: $profile_name"
                     role_count=$((role_count + 1))
                     total_profiles=$((total_profiles + 1))
@@ -459,7 +471,9 @@ generate_profiles_for_accounts() {
 
     show_progress_complete "$total_accounts" "プロファイル生成完了"
 
-    add_batch_end_comment "$config_file"
+    if [ "$dry_run" != true ]; then
+        add_batch_end_comment "$config_file"
+    fi
 
     # Phase 3 完了 + 全体集計 (timing)
     local t_phase3 t_total
@@ -469,7 +483,22 @@ generate_profiles_for_accounts() {
     log_to_file "[TIMING] TOTAL (generate_profiles_for_accounts): ${t_total}s"
 
     echo
-    log_success "合計 $total_profiles 個のプロファイルを作成しました"
+    if [ "$dry_run" = true ]; then
+        log_success "DRY-RUN: $total_profiles 個のプロファイルが生成される予定です (設定ファイルは未変更)"
+        # プレビュー: 先頭 10 件 + 末尾省略表示
+        if [ "$total_profiles" -gt 0 ]; then
+            echo "  ▼ プレビュー (先頭 10 件):"
+            local _i
+            for _i in "${generated_profiles[@]:0:10}"; do
+                echo "    [profile $_i]"
+            done
+            if [ "$total_profiles" -gt 10 ]; then
+                echo "    ... (残り $((total_profiles - 10)) 件はログファイルを参照)"
+            fi
+        fi
+    else
+        log_success "合計 $total_profiles 個のプロファイルを作成しました"
+    fi
     log_info "処理時間: 全体 ${t_total}s (Phase1: ${t_phase1}s / Phase2: ${t_phase2}s / Phase3: ${t_phase3}s)"
 
     # 失敗アカウントの集約報告
@@ -496,12 +525,14 @@ show_usage() {
     echo "  --force, -f         デフォルト値で自動実行（対話なし）"
     echo "  --refresh-cache     既存キャッシュを削除してから API を再取得"
     echo "  --parallel N        並列度 (省略時 PARALLEL 環境変数または 8)"
+    echo "  --dry-run           設定ファイルを変更せず、生成予定のプロファイルだけ表示"
     echo
     echo "例:"
     echo "  $0                  # 対話モードで実行"
     echo "  $0 --force          # デフォルト値で自動実行"
     echo "  $0 --refresh-cache  # キャッシュ無効化してから実行"
     echo "  $0 --parallel 16    # 並列度 16 で実行"
+    echo "  $0 --dry-run --force # プレビューのみ (実ファイル変更なし)"
     echo "  $0 --help           # ヘルプを表示"
     echo
     echo "キャッシュ:"
@@ -553,6 +584,7 @@ check_and_handle_aws_profile() {
 main() {
     local force_mode=false
     local refresh_cache=false
+    local dry_run=false
 
     # コマンドライン引数の処理
     while [[ $# -gt 0 ]]; do
@@ -567,6 +599,10 @@ main() {
                 ;;
             --refresh-cache)
                 refresh_cache=true
+                shift
+                ;;
+            --dry-run)
+                dry_run=true
                 shift
                 ;;
             --parallel)
@@ -733,21 +769,39 @@ main() {
 
     echo
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: 既存の自動生成ブロックを削除して再生成します"
-        generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type"
+        if [ "$dry_run" = true ]; then
+            log_info "フォース + DRY-RUN: 設定ファイルは変更されません (プレビューのみ)"
+        else
+            log_info "フォースモード: 既存の自動生成ブロックを削除して再生成します"
+        fi
+        generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$dry_run"
         update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
         echo
-        log_success "プロファイル自動生成が完了しました！"
-        log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
-        log_info "詳細ログ: $LOG_FILE"
-    else
-        read -r -p "この設定でプロファイルを生成しますか？ (y/n): " confirm
-        if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type"
-            update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
-            echo
+        if [ "$dry_run" = true ]; then
+            log_success "DRY-RUN 完了 (実際の書き込みは行われませんでした)"
+        else
             log_success "プロファイル自動生成が完了しました！"
             log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+        fi
+        log_info "詳細ログ: $LOG_FILE"
+    else
+        local prompt_msg
+        if [ "$dry_run" = true ]; then
+            prompt_msg="この設定で DRY-RUN を実行しますか？ (y/n): "
+        else
+            prompt_msg="この設定でプロファイルを生成しますか？ (y/n): "
+        fi
+        read -r -p "$prompt_msg" confirm
+        if [[ "$confirm" =~ ^[Yy]$ ]]; then
+            generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$dry_run"
+            update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
+            echo
+            if [ "$dry_run" = true ]; then
+                log_success "DRY-RUN 完了 (実際の書き込みは行われませんでした)"
+            else
+                log_success "プロファイル自動生成が完了しました！"
+                log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+            fi
             log_info "詳細ログ: $LOG_FILE"
         else
             log_info "プロファイル生成をキャンセルしました"

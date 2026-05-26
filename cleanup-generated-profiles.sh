@@ -122,72 +122,101 @@ verify_cleanup() {
 
 # メイン実行
 main() {
-    echo "🗑️  AWS SSO 自動生成プロファイル削除"
+    local dry_run=false
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --dry-run)
+                dry_run=true
+                shift
+                ;;
+            --help|-h)
+                echo "使用方法: $0 [--dry-run] [--help]"
+                echo "  --dry-run  削除予定のプロファイルを表示するだけで実ファイルは変更しない"
+                exit 0
+                ;;
+            *)
+                log_error "不明なオプション: $1"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [ "$dry_run" = true ]; then
+        echo "🗑️  AWS SSO 自動生成プロファイル削除 (DRY-RUN)"
+    else
+        echo "🗑️  AWS SSO 自動生成プロファイル削除"
+    fi
     echo "====================================="
     echo
-    
+
     # 設定ファイルの取得
     local config_file
     config_file=$(get_config_file)
-    
+
     log_info "設定ファイル: $config_file"
     echo
-    
+
     # 削除前の統計を取得
     local before_stats
     before_stats=$(get_profile_stats_data "$config_file")
-    
+
     # 削除前の統計表示
     log_info "削除前の状態:"
     echo
     show_profile_stats "$config_file"
     echo
-    
+
     # 自動生成プロファイルの確認
     if ! check_generated_profiles "$config_file"; then
         log_info "削除対象のプロファイルがありません"
         exit 0
     fi
-    
+
     # 削除予定プロファイルの表示
     echo
     show_profiles_to_delete "$config_file"
-    
+
+    if [ "$dry_run" = true ]; then
+        echo
+        log_success "DRY-RUN 完了 (実際の削除は行われませんでした)"
+        exit 0
+    fi
+
     # 削除確認
     echo
     log_warning "自動生成されたプロファイル（AWS_SSO_CONFIG_GENERATOR）をすべて削除します"
     read -r -p "続行しますか？ (y/n): " confirm
-    
+
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
         log_info "削除をキャンセルしました"
         exit 0
     fi
-    
+
     echo
-    
+
     # プロファイル削除の実行
     remove_generated_profiles "$config_file"
-    
+
     echo
-    
+
     # 削除結果の確認
     verify_cleanup "$config_file"
-    
+
     # 削除後の統計を取得
     local after_stats
     after_stats=$(get_profile_stats_data "$config_file")
-    
+
     # 削除後の統計表示
     echo
     log_info "削除後の状態:"
     echo
     show_profile_stats "$config_file"
-    
+
     # diff形式での変更表示
     echo
     log_info "変更内容 (diff形式):"
     show_profile_diff "$before_stats" "$after_stats"
-    
+
     echo
     log_success "自動生成プロファイルの削除が完了しました！"
 }
