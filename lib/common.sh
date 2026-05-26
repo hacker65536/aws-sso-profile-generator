@@ -143,6 +143,20 @@ rotate_backups() {
     rotate_files_by_pattern "${config_file}.backup.*" "$keep" "バックアップ"
 }
 
+# ファイル末尾の連続する空行を除去する (内容中の空行は保持)
+# 引数: $1=対象ファイルパス
+# 目的: マーカーブロック削除後の sed が残す末尾空行を整理し、
+#       次回 add_batch_start_comment の "echo ''" による空行累積を防ぐ
+trim_trailing_empty_lines() {
+    local file="$1"
+    [ -f "$file" ] || return 0
+    # awk で末尾の連続空行を除去 (内容行が来たら溜めていた空行も出力)
+    awk '
+        /^$/ { empties++; next }
+        { for (i = 0; i < empties; i++) print ""; empties = 0; print }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+}
+
 # 設定ファイル内の AWS_SSO_CONFIG_GENERATOR ブロックからプロファイル名一覧を抽出
 # 引数: $1=設定ファイルパス
 # 出力: ソート済みプロファイル名 (1 行 1 件)

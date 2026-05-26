@@ -186,6 +186,8 @@ remove_generated_blocks() {
         log_info "既存の自動生成ブロックを削除中..."
         sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
         rm -f "${config_file}.tmp"
+        # sed が残す末尾空行を整理 (再実行ごとの空行累積を防ぐ)
+        trim_trailing_empty_lines "$config_file"
         log_success "既存の自動生成ブロックを削除しました"
     fi
 }

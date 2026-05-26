@@ -96,6 +96,9 @@ remove_generated_profiles() {
     # 一時ファイルを削除
     rm -f "${config_file}.tmp"
 
+    # sed が残す末尾空行を整理 (空行累積を防ぐ)
+    trim_trailing_empty_lines "$config_file"
+
     log_success "自動生成プロファイルを削除しました"
 }
 
