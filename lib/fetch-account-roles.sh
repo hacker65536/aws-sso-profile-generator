@@ -36,9 +36,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/common.sh"
 
 # 必須環境変数の確認
-: "${ACCESS_TOKEN:?ACCESS_TOKEN が未設定です}"
-: "${SSO_SESSION_NAME:?SSO_SESSION_NAME が未設定です}"
-: "${SSO_START_URL:?SSO_START_URL が未設定です}"
+: "${ACCESS_TOKEN:?ACCESS_TOKEN is not set}"
+: "${SSO_SESSION_NAME:?SSO_SESSION_NAME is not set}"
+: "${SSO_START_URL:?SSO_START_URL is not set}"
 
 # 出力ディレクトリの確認
 if [ ! -d "$output_dir" ]; then
@@ -59,7 +59,7 @@ roles_json=""
 if roles_json=$(get_cached_roles "$account_id" "$ACCESS_TOKEN" "$SSO_SESSION_NAME" "$SSO_START_URL" 2>/dev/null); then
     # ロール名のみを 1 行ずつ出力
     if ! echo "$roles_json" | jq -r '.roleList[].roleName' > "${output_dir}/${account_id}.roles" 2>/dev/null; then
-        echo "ロール JSON の解析に失敗しました" > "${output_dir}/${account_id}.err"
+        echo "Failed to parse roles JSON" > "${output_dir}/${account_id}.err"
         echo "err ${account_id} jq_parse_failed"
         exit 1
     fi
@@ -71,7 +71,7 @@ if roles_json=$(get_cached_roles "$account_id" "$ACCESS_TOKEN" "$SSO_SESSION_NAM
     fi
     exit 0
 else
-    echo "ロール一覧の取得に失敗しました (API 呼び出し失敗またはレスポンス不正)" > "${output_dir}/${account_id}.err"
+    echo "Failed to fetch roles (API call failed or invalid response)" > "${output_dir}/${account_id}.err"
     echo "err ${account_id} fetch_failed"
     exit 1
 fi

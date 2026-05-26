@@ -2,6 +2,17 @@
 
 すべての特記すべき変更点をここに記録します。フォーマットは [Keep a Changelog](https://keepachangelog.com/) を参考にしています。
 
+## [v1.21.0] - 出力の英語化・整形
+
+### Changed
+- スクリプトの全ユーザー向け出力を英語化（コードコメントは日本語のまま）
+- `rotate_files_by_pattern` の出力をコロン形式に変更（`Backups removed: 1 (kept: 10)` / `Log files removed: 3 (kept: 30)`）
+- Phase 2/3 の出力を 1 ブロックにまとめ、Phase 境界のみ空行で区切る
+
+### Fixed
+- "Expires at" 後と "Normalization examples" 後の二重空行を除去
+- Phase 2 ヘッダと中身を分断していた空行を除去（ブロック感を改善）
+
 ## [v1.20.0] - UX 大量改善・コード品質向上・並行実行ガード
 
 ### Added

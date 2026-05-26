@@ -641,6 +641,11 @@ aws_profile_with_preview() {
 
 直近のハイライトのみ抜粋。完全な履歴は [CHANGELOG.md](CHANGELOG.md) を参照してください。
 
+- **v1.21.0** - 出力の英語化・整形
+  - スクリプトの全ユーザー向け出力を英語化（コードコメントは日本語のまま）
+  - `rotate_files_by_pattern` の出力をコロン形式に変更（単複の文法問題を回避）
+  - Phase 2/3 のブロック化と二重空行除去で出力を読みやすく
+
 - **v1.20.0** - UX 大量改善・コード品質向上・並行実行ガード
   - `--account-filter` / `--role-filter` フラグでアカウント/ロール絞り込み
   - `cleanup --session NAME` で特定セッションのみ削除

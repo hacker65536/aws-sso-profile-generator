@@ -16,12 +16,12 @@ show_profiles_to_delete() {
         return 1
     fi
     
-    log_info "削除予定のプロファイル:"
-    
+    log_info "Profiles to delete:"
+
     # AWS_SSO_CONFIG_GENERATOR で囲まれたブロック内のプロファイルを抽出
     local in_generator_block=false
     local profile_count=0
-    
+
     while IFS= read -r line; do
         if [[ $line =~ ^#[[:space:]]*AWS_SSO_CONFIG_GENERATOR[[:space:]]+START ]]; then
             in_generator_block=true
@@ -35,12 +35,12 @@ show_profiles_to_delete() {
             profile_count=$((profile_count + 1))
         fi
     done < "$config_file"
-    
+
     if [ $profile_count -eq 0 ]; then
-        echo "  (削除対象のプロファイルはありません)"
+        echo "  (no profiles match for deletion)"
     else
         echo
-        log_info "削除予定プロファイル数: $profile_count 個"
+        log_info "Profiles to delete: $profile_count"
     fi
 }
 
@@ -49,23 +49,23 @@ check_generated_profiles() {
     local config_file="$1"
     
     if [ ! -f "$config_file" ]; then
-        log_error "AWS設定ファイルが見つかりません: $config_file"
+        log_error "AWS config file not found: $config_file"
         return 1
     fi
-    
+
     # AWS_SSO_CONFIG_GENERATOR コメントの検索
     local generator_blocks
     generator_blocks=$(grep -n "AWS_SSO_CONFIG_GENERATOR" "$config_file" 2>/dev/null || true)
-    
+
     if [ -z "$generator_blocks" ]; then
-        log_info "自動生成されたプロファイルは見つかりませんでした"
+        log_info "No auto-generated profiles found"
         return 1
     fi
-    
-    log_info "自動生成プロファイルブロックを検出しました:"
+
+    log_info "Auto-generated profile blocks detected:"
     echo "$generator_blocks"
     echo
-    
+
     return 0
 }
 
@@ -80,16 +80,16 @@ remove_generated_profiles() {
         return 1
     fi
 
-    log_info "設定ファイルのバックアップを作成中..."
+    log_info "Backing up config file..."
     local backup_file
     backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
     cp "$config_file" "$backup_file"
-    log_success "バックアップファイルを作成しました: $backup_file"
+    log_success "Backup created: $backup_file"
 
     rotate_backups "$config_file" 10
 
     if [ -n "$session_filter" ]; then
-        log_info "セッション '$session_filter' のプロファイルのみ削除中..."
+        log_info "Deleting profiles for session '$session_filter' only..."
         # awk で AWS_SSO_CONFIG_GENERATOR ブロック内の特定セッションプロファイルのみ除外
         awk -v session="$session_filter" '
             BEGIN { in_block = 0; in_profile = 0; buf = ""; sess = "" }
@@ -122,7 +122,7 @@ remove_generated_profiles() {
             { print }
         ' "$config_file" > "${config_file}.tmp" && mv "${config_file}.tmp" "$config_file"
     else
-        log_info "自動生成プロファイルを削除中..."
+        log_info "Deleting auto-generated profiles..."
         # AWS_SSO_CONFIG_GENERATOR で囲まれたブロックを丸ごと削除
         sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
         rm -f "${config_file}.tmp"
@@ -131,23 +131,23 @@ remove_generated_profiles() {
     # 末尾空行を整理 (空行累積を防ぐ)
     trim_trailing_empty_lines "$config_file"
 
-    log_success "自動生成プロファイルを削除しました"
+    log_success "Auto-generated profiles deleted"
 }
 
 # 削除結果の確認
 verify_cleanup() {
     local config_file="$1"
     
-    log_info "削除結果を確認中..."
-    
+    log_info "Verifying cleanup..."
+
     local remaining_blocks
     remaining_blocks=$(grep -n "AWS_SSO_CONFIG_GENERATOR" "$config_file" 2>/dev/null || true)
-    
+
     if [ -z "$remaining_blocks" ]; then
-        log_success "すべての自動生成プロファイルが正常に削除されました"
+        log_success "All auto-generated profiles removed successfully"
         return 0
     else
-        log_warning "一部の自動生成プロファイルが残っている可能性があります:"
+        log_warning "Some auto-generated profiles may remain:"
         echo "$remaining_blocks"
         return 1
     fi
@@ -167,29 +167,29 @@ main() {
                 ;;
             --session)
                 if [ $# -lt 2 ]; then
-                    log_error "--session には session name が必要です"
+                    log_error "--session requires a session name"
                     exit 1
                 fi
                 session_filter="$2"
                 shift 2
                 ;;
             --help|-h)
-                echo "使用方法: $0 [--dry-run] [--session NAME] [--help]"
-                echo "  --dry-run         削除予定のプロファイルを表示するだけで実ファイルは変更しない"
-                echo "  --session NAME    指定 SSO セッションのプロファイルのみ削除"
+                echo "Usage: $0 [--dry-run] [--session NAME] [--help]"
+                echo "  --dry-run         Show profiles that would be deleted without modifying the file"
+                echo "  --session NAME    Delete only profiles belonging to the given SSO session"
                 exit 0
                 ;;
             *)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 exit 1
                 ;;
         esac
     done
 
     if [ "$dry_run" = true ]; then
-        echo "🗑️  AWS SSO 自動生成プロファイル削除 (DRY-RUN)"
+        echo "🗑️  AWS SSO Auto-generated Profile Cleanup (DRY-RUN)"
     else
-        echo "🗑️  AWS SSO 自動生成プロファイル削除"
+        echo "🗑️  AWS SSO Auto-generated Profile Cleanup"
     fi
     echo "====================================="
     echo
@@ -198,7 +198,7 @@ main() {
     local config_file
     config_file=$(get_config_file)
 
-    log_info "設定ファイル: $config_file"
+    log_info "Config file: $config_file"
     echo
 
     # 削除前の統計を取得
@@ -206,14 +206,14 @@ main() {
     before_stats=$(get_profile_stats_data "$config_file")
 
     # 削除前の統計表示
-    log_info "削除前の状態:"
+    log_info "Before cleanup:"
     echo
     show_profile_stats "$config_file"
     echo
 
     # 自動生成プロファイルの確認
     if ! check_generated_profiles "$config_file"; then
-        log_info "削除対象のプロファイルがありません"
+        log_info "No profiles to delete"
         exit 0
     fi
 
@@ -223,17 +223,17 @@ main() {
 
     if [ "$dry_run" = true ]; then
         echo
-        log_success "DRY-RUN 完了 (実際の削除は行われませんでした)"
+        log_success "DRY-RUN complete (no actual deletion performed)"
         exit 0
     fi
 
     # 削除確認
     echo
-    log_warning "自動生成されたプロファイル（AWS_SSO_CONFIG_GENERATOR）をすべて削除します"
-    read -r -p "続行しますか？ (y/n): " confirm
+    log_warning "All auto-generated profiles (AWS_SSO_CONFIG_GENERATOR) will be removed"
+    read -r -p "Continue? (y/n): " confirm
 
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        log_info "削除をキャンセルしました"
+        log_info "Cleanup cancelled"
         exit 0
     fi
 
@@ -253,17 +253,17 @@ main() {
 
     # 削除後の統計表示
     echo
-    log_info "削除後の状態:"
+    log_info "After cleanup:"
     echo
     show_profile_stats "$config_file"
 
     # diff形式での変更表示
     echo
-    log_info "変更内容 (diff形式):"
+    log_info "Changes (diff):"
     show_profile_diff "$before_stats" "$after_stats"
 
     echo
-    log_success "自動生成プロファイルの削除が完了しました！"
+    log_success "Auto-generated profile cleanup completed!"
 }
 
 # スクリプト実行

@@ -9,19 +9,19 @@ set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
 show_usage() {
-    echo "使用方法: check.sh cache [SUBCOMMAND]"
+    echo "Usage: check.sh cache [SUBCOMMAND]"
     echo
-    echo "サブコマンド:"
-    echo "  (なし) | stats        キャッシュ統計を表示 (デフォルト)"
-    echo "  clear [SESSION]       全キャッシュを削除 (SESSION 指定でセッション単位)"
-    echo "  validate              キャッシュファイルの有効性をチェック"
-    echo "  help                  このヘルプを表示"
+    echo "Subcommands:"
+    echo "  (none) | stats        Show cache statistics (default)"
+    echo "  clear [SESSION]       Clear all cache (or only for SESSION)"
+    echo "  validate              Validate cache files"
+    echo "  help                  Show this help"
     echo
-    echo "例:"
-    echo "  check.sh cache              # 統計表示"
-    echo "  check.sh cache clear        # 全削除"
-    echo "  check.sh cache clear my-session   # セッション単位削除"
-    echo "  check.sh cache validate     # 期限切れファイルを一覧"
+    echo "Examples:"
+    echo "  check.sh cache              # Show statistics"
+    echo "  check.sh cache clear        # Clear all"
+    echo "  check.sh cache clear my-session   # Clear per-session"
+    echo "  check.sh cache validate     # List expired files"
 }
 
 cmd_validate() {
@@ -49,7 +49,7 @@ cmd_validate() {
 
     if [ "$expired_count" -gt 0 ]; then
         echo
-        log_warning "期限切れファイル (10 件まで表示):"
+        log_warning "Expired files (showing up to 10):"
         find "$CACHE_DIR" -maxdepth 1 -type f \
             \( -name "accounts-*.json" -o -name "roles-*.json" \) \
             ! -mmin "-${max_mmin}" 2>/dev/null \
@@ -58,7 +58,7 @@ cmd_validate() {
                 echo "    - $(basename "$f")"
             done
         echo
-        log_info "削除するには: check.sh cache clear"
+        log_info "To clear them: check.sh cache clear"
     fi
 }
 
@@ -80,7 +80,7 @@ main() {
             show_usage
             ;;
         *)
-            log_error "不明なサブコマンド: $cmd"
+            log_error "Unknown subcommand: $cmd"
             echo
             show_usage
             exit 1

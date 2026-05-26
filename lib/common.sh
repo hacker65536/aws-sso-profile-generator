@@ -114,10 +114,10 @@ verify_marker_integrity() {
     ends=${ends:-0}
 
     if [ "$starts" != "$ends" ]; then
-        log_error "AWS_SSO_CONFIG_GENERATOR マーカーが不整合です"
-        log_error "  START: $starts 個 / END: $ends 個"
-        log_error "  対象ファイル: $config_file"
-        log_error "  自動削除を中止しました。手動で確認してください。"
+        log_error "AWS_SSO_CONFIG_GENERATOR markers are inconsistent"
+        log_error "  START: $starts / END: $ends"
+        log_error "  File:  $config_file"
+        log_error "  Auto-removal aborted. Please check manually."
         return 1
     fi
     return 0
@@ -142,7 +142,7 @@ acquire_lock() {
     stale_pid=$(cat "$lock/pid" 2>/dev/null || echo "")
     if [ -n "$stale_pid" ] && ! kill -0 "$stale_pid" 2>/dev/null; then
         # プロセスが死んでいる → stale lock として除去して再取得
-        log_warning "古いロック (pid=$stale_pid, 既に終了) を検出、削除して再試行します"
+        log_warning "Stale lock detected (pid=$stale_pid, no longer running); removing and retrying"
         rm -rf "$lock" 2>/dev/null || true
         if mkdir "$lock" 2>/dev/null; then
             LOCK_DIR="$lock"
@@ -166,7 +166,7 @@ release_lock() {
 rotate_files_by_pattern() {
     local pattern="$1"
     local keep="${2:-10}"
-    local label="${3:-ファイル}"
+    local label="${3:-Files}"  # コロン形式: "<Label> removed: N (kept: M)"
 
     local removed
     # シェルグロブを使わず ls -t ベースで安全に列挙
@@ -178,7 +178,7 @@ rotate_files_by_pattern() {
         done
         local removed_count
         removed_count=$(echo "$removed" | grep -c . || true)
-        log_info "古い${label}を ${removed_count} 個削除しました (保持: ${keep})"
+        log_info "${label} removed: ${removed_count} (kept: ${keep})"
     fi
 }
 
@@ -187,7 +187,7 @@ rotate_files_by_pattern() {
 rotate_backups() {
     local config_file="$1"
     local keep="${2:-10}"
-    rotate_files_by_pattern "${config_file}.backup.*" "$keep" "バックアップ"
+    rotate_files_by_pattern "${config_file}.backup.*" "$keep" "Backups"
 }
 
 # "[profile NAME]" の行からプロファイル名 (NAME) を抽出する
@@ -277,7 +277,7 @@ is_cache_valid() {
 ensure_cache_dir() {
     if [ ! -d "$CACHE_DIR" ]; then
         mkdir -p "$CACHE_DIR" 2>/dev/null || {
-            log_error "キャッシュディレクトリを作成できません: $CACHE_DIR"
+            log_error "Cannot create cache directory: $CACHE_DIR"
             return 1
         }
     fi
@@ -308,12 +308,12 @@ get_cached_accounts() {
     cache_file=$(cache_file_accounts "$session_name" "$hash")
 
     if is_cache_valid "$cache_file"; then
-        log_debug "キャッシュヒット: $cache_file"
+        log_debug "Cache hit: $cache_file"
         cat "$cache_file"
         return 0
     fi
 
-    log_debug "キャッシュミス: $cache_file (API 呼び出し)"
+    log_debug "Cache miss: $cache_file (calling API)"
     local json
     if ! json=$(unset AWS_PROFILE; aws sso list-accounts --access-token "$token" --region "${SSO_REGION:-}" --output json 2>/dev/null); then
         return 1
@@ -364,12 +364,12 @@ clear_cache() {
     local session_filter="${1:-}"
 
     if [ ! -d "$CACHE_DIR" ]; then
-        log_info "キャッシュディレクトリが存在しません: $CACHE_DIR"
+        log_info "Cache directory does not exist: $CACHE_DIR"
         return 0
     fi
 
     if [ -n "$session_filter" ]; then
-        log_info "セッション '$session_filter' のキャッシュを削除中..."
+        log_info "Clearing cache for session '$session_filter'..."
         # accounts-{session}-{hash}.json から hash を抽出し、対応する roles-*-{hash}.json も削除
         local f basename prefix hash
         while IFS= read -r f; do
@@ -383,12 +383,12 @@ clear_cache() {
             fi
         done < <(find "$CACHE_DIR" -maxdepth 1 -type f -name "accounts-${session_filter}-*.json" 2>/dev/null)
     else
-        log_info "全キャッシュを削除中..."
+        log_info "Clearing all cache..."
         find "$CACHE_DIR" -maxdepth 1 -type f \
             \( -name "accounts-*.json" -o -name "roles-*.json" -o -name "metadata.json" \) \
             -delete 2>/dev/null || true
     fi
-    log_success "キャッシュを削除しました"
+    log_success "Cache cleared"
 }
 
 # キャッシュ統計表示
@@ -489,7 +489,7 @@ parse_utc_to_epoch() {
 convert_utc_to_local() {
     local utc_time="$1" epoch
     if ! epoch=$(parse_utc_to_epoch "$utc_time"); then
-        echo "$utc_time (変換不可: BSD/GNU date どちらも利用不可)"
+        echo "$utc_time (cannot convert: neither BSD nor GNU date available)"
         return 1
     fi
     # printf %()T は bash 4.2+ 内蔵、外部プロセス不要
@@ -501,7 +501,7 @@ show_profile_stats() {
     local config_file="$1"
     
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -530,7 +530,7 @@ show_detailed_profile_summary() {
     local config_file="$1"
     
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -564,7 +564,7 @@ show_detailed_profile_summary() {
     # SSO セッション一覧の表示
     if [ "$total_sso_sessions" -gt 0 ]; then
         echo
-        echo "SSO セッション:"
+        echo "SSO sessions:"
         while IFS= read -r line; do
             if [ -n "$line" ]; then
                 local session_name
@@ -578,7 +578,7 @@ show_detailed_profile_summary() {
     # 自動生成プロファイルの生成日時一覧の表示
     if [ "$managed_count" -gt 0 ] && [ -n "$gen_timestamps" ]; then
         echo
-        echo "自動生成プロファイル (生成日時):"
+        echo "Auto-generated profiles (generated at):"
         while IFS= read -r ts; do
             if [ -n "$ts" ]; then
                 echo "  - $ts"
@@ -628,77 +628,77 @@ show_profile_diff() {
     local diff_managed=$((after_managed - before_managed))
     
     # diff形式で表示
-    echo "--- 削除前"
-    echo "+++ 削除後"
-    echo "@@ プロファイル統計の変更 @@"
-    
-    # 総プロファイル数
+    echo "--- before"
+    echo "+++ after"
+    echo "@@ Profile statistics changes @@"
+
+    # Total profiles
     if [ "$diff_total" -ne 0 ]; then
-        echo "- 総プロファイル数: $before_total"
-        echo "+ 総プロファイル数: $after_total"
+        echo "- Total profiles: $before_total"
+        echo "+ Total profiles: $after_total"
         if [ "$diff_total" -lt 0 ]; then
-            echo "  (${diff_total#-} 個削除)"
+            echo "  (${diff_total#-} removed)"
         else
-            echo "  (+$diff_total 個追加)"
+            echo "  (+$diff_total added)"
         fi
     else
-        echo "  総プロファイル数: $after_total (変更なし)"
+        echo "  Total profiles: $after_total (no change)"
     fi
-    
-    # SSOプロファイル数
+
+    # SSO profiles
     if [ "$diff_sso" -ne 0 ]; then
-        echo "- SSOプロファイル数: $before_sso"
-        echo "+ SSOプロファイル数: $after_sso"
+        echo "- SSO profiles: $before_sso"
+        echo "+ SSO profiles: $after_sso"
         if [ "$diff_sso" -lt 0 ]; then
-            echo "  (${diff_sso#-} 個削除)"
+            echo "  (${diff_sso#-} removed)"
         else
-            echo "  (+$diff_sso 個追加)"
+            echo "  (+$diff_sso added)"
         fi
     else
-        echo "  SSOプロファイル数: $after_sso (変更なし)"
+        echo "  SSO profiles: $after_sso (no change)"
     fi
-    
-    # SSO セッション数
+
+    # SSO sessions
     if [ "$diff_sessions" -ne 0 ]; then
-        echo "- SSO セッション数: $before_sessions"
-        echo "+ SSO セッション数: $after_sessions"
+        echo "- SSO sessions: $before_sessions"
+        echo "+ SSO sessions: $after_sessions"
         if [ "$diff_sessions" -lt 0 ]; then
-            echo "  (${diff_sessions#-} 個削除)"
+            echo "  (${diff_sessions#-} removed)"
         else
-            echo "  (+$diff_sessions 個追加)"
+            echo "  (+$diff_sessions added)"
         fi
     else
-        echo "  SSO セッション数: $after_sessions (変更なし)"
+        echo "  SSO sessions: $after_sessions (no change)"
     fi
-    
-    # 自動生成プロファイル数
+
+    # Auto-generated profiles
     if [ "$diff_managed" -ne 0 ]; then
-        echo "- 自動生成プロファイル数: $before_managed"
-        echo "+ 自動生成プロファイル数: $after_managed"
+        echo "- Auto-generated: $before_managed"
+        echo "+ Auto-generated: $after_managed"
         if [ "$diff_managed" -lt 0 ]; then
-            echo "  (${diff_managed#-} 個削除)"
+            echo "  (${diff_managed#-} removed)"
         else
-            echo "  (+$diff_managed 個追加)"
+            echo "  (+$diff_managed added)"
         fi
     else
-        echo "  自動生成プロファイル数: $after_managed (変更なし)"
+        echo "  Auto-generated: $after_managed (no change)"
     fi
-    
-    # サマリー
+
+    # Summary
     echo
     if [ "$diff_total" -lt 0 ]; then
-        log_success "合計 ${diff_total#-} 個のプロファイルを削除しました"
+        log_success "Removed ${diff_total#-} profiles in total"
     elif [ "$diff_total" -gt 0 ]; then
-        log_info "合計 $diff_total 個のプロファイルが追加されました"
+        log_info "Added $diff_total profiles in total"
     else
-        log_info "プロファイル数に変更はありませんでした"
+        log_info "No profile count changes"
     fi
 }
 
 # スピナー表示関数
 show_spinner() {
     local pid=$1
-    local message="${2:-処理中}"
+    local message="${2:-Working}"
     local i=0
     local spin='⠧⠏⠛⠹⠼⠶'
     local n=${#spin}
@@ -737,7 +737,7 @@ run_with_spinner() {
 # 簡単なスピナー（固定時間）
 show_spinner_for_seconds() {
     local seconds="$1"
-    local message="${2:-処理中}"
+    local message="${2:-Working}"
     local i=0
     local spin='⠧⠏⠛⠹⠼⠶'
     local n=${#spin}
@@ -759,7 +759,7 @@ show_spinner_for_seconds() {
 # プログレスバー風スピナー
 show_progress_spinner() {
     local pid=$1
-    local message="${2:-処理中}"
+    local message="${2:-Working}"
     local i=0
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
     local n=${#spin}
@@ -779,7 +779,7 @@ show_progress_spinner() {
 show_progress_with_counter() {
     local current="$1"
     local total="$2"
-    local message="${3:-処理中}"
+    local message="${3:-Working}"
     local i=0
     local spin='⠧⠏⠛⠹⠼⠶'
     local n=${#spin}
@@ -816,7 +816,7 @@ show_progress_with_counter() {
 # プログレス完了表示
 show_progress_complete() {
     local total="$1"
-    local message="${2:-完了}"
+    local message="${2:-Done}"
 
     # \r で column 0 に戻ってから行消去 → 完了行を描画
     # (旧コードは \r 抜けで前回の cursor 位置から描画され、長い場合は折り返していた)
@@ -834,7 +834,7 @@ get_sso_config() {
     local selected_session="${2:-}"  # オプション: 特定のセッション名を指定
     
     if [ ! -f "$config_file" ]; then
-        log_error "AWS設定ファイルが見つかりません: $config_file"
+        log_error "AWS config file not found: $config_file"
         return 1
     fi
     
@@ -849,7 +849,7 @@ get_sso_config() {
 
     
     if [ ${#sso_sessions[@]} -eq 0 ]; then
-        log_error "SSO Session設定が見つかりません"
+        log_error "No SSO Session configuration found"
         return 1
     fi
     
@@ -867,17 +867,17 @@ get_sso_config() {
                 fi
             done
             if [ "$found" = false ]; then
-                log_error "指定されたSSO Session '$selected_session' が見つかりません"
+                log_error "Specified SSO Session '$selected_session' not found"
                 return 1
             fi
         else
             # 複数のセッションを表示して最初のものを使用
-            log_info "複数のSSO Sessionが見つかりました:"
+            log_info "Multiple SSO Sessions found:"
             for i in "${!sso_sessions[@]}"; do
                 echo "  $((i+1)). ${sso_sessions[i]}"
             done
             session_name="${sso_sessions[0]}"
-            log_info "最初のセッション '${session_name}' を使用します"
+            log_info "Using the first session: '${session_name}'"
         fi
     else
         session_name="${sso_sessions[0]}"
@@ -921,17 +921,17 @@ get_access_token() {
     local sso_start_url="$1"
     
     if [ -z "$sso_start_url" ]; then
-        log_error "SSO Start URLが指定されていません"
+        log_error "SSO Start URL is required"
         return 1
     fi
     
-    log_info "アクセストークンの取得中..."
+    log_info "Fetching access token..."
     
     local sso_cache_dir="$HOME/.aws/sso/cache"
     
     # SSO キャッシュディレクトリの存在確認
     if [ ! -d "$sso_cache_dir" ]; then
-        log_error "SSO キャッシュディレクトリが見つかりません: $sso_cache_dir"
+        log_error "SSO cache directory not found: $sso_cache_dir"
         show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
@@ -941,7 +941,7 @@ get_access_token() {
     cache_files=$(grep -l -r "$sso_start_url" "$sso_cache_dir" 2>/dev/null || true)
 
     if [ -z "$cache_files" ]; then
-        log_error "SSO セッションキャッシュが見つかりません"
+        log_error "SSO session cache not found"
         show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
@@ -950,11 +950,11 @@ get_access_token() {
     local latest_file
     latest_file=$(echo "$cache_files" | xargs ls -t | head -n1)
 
-    log_info "SSO キャッシュファイル: $(basename "$latest_file")"
+    log_info "SSO cache file: $(basename "$latest_file")"
 
     # jqでaccessTokenを取得
     if ! command -v jq &> /dev/null; then
-        log_error "jq コマンドが見つかりません。jqをインストールしてください"
+        log_error "jq command not found. Please install jq"
         return 1
     fi
 
@@ -962,7 +962,7 @@ get_access_token() {
     access_token=$(jq -r '.accessToken // empty' "$latest_file" 2>/dev/null)
 
     if [ -z "$access_token" ]; then
-        log_error "アクセストークンが見つかりません"
+        log_error "Access token not found"
         show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
@@ -983,22 +983,22 @@ get_access_token() {
 
         if ! expires_timestamp=$(parse_utc_to_epoch "$expires_at"); then
             # BSD/GNU date のどちらも使えない場合、判定をスキップ
-            log_warning "セッション有効性の自動判定をスキップしました"
-            echo "  有効期限: $local_expires"
+            log_warning "Could not auto-determine session validity (skipped)"
+            log_kv "Expires at" "$local_expires"
             export ACCESS_TOKEN="$access_token"
             return 0
         fi
         
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
-            log_error "SSO セッションが期限切れです"
+            log_error "SSO session has expired"
             show_sso_login_command "$SSO_SESSION_NAME" "$local_expires"
             return 1
         else
-            log_success "有効なアクセストークンを取得しました"
-            echo "  有効期限: $local_expires"
+            log_success "Access token is valid"
+            log_kv "Expires at" "$local_expires"
         fi
     else
-        log_success "有効なアクセストークンを取得しました（有効期限情報なし）"
+        log_success "Access token acquired (no expiry info)"
     fi
 
     export ACCESS_TOKEN="$access_token"
@@ -1012,19 +1012,19 @@ show_sso_login_command() {
     local expires_at="${2:-}"
 
     if [ -n "$expires_at" ]; then
-        log_warning "  有効期限: $expires_at"
+        log_warning "  Expired at: $expires_at"
     fi
 
     echo
-    log_info "▶ 次のコマンドで再ログインしてください:"
+    log_info "▶ Run the following to re-authenticate:"
     if [ -n "$session_name" ]; then
         echo "    aws sso login --sso-session $session_name"
-        echo "    # ブラウザが使えない環境では --use-device-code を付加"
+        echo "    # Append --use-device-code if browser is unavailable"
     else
         echo "    aws sso login --sso-session <session-name>"
     fi
     echo
-    log_info "▶ ログイン後、このスクリプトを再実行してください:"
+    log_info "▶ After login, re-run this script:"
     # $0 が空 (source 時など) の場合はスクリプト名を fallback
     local script_name="${BASH_SOURCE[1]##*/}"
     [ -z "$script_name" ] && script_name="generate-sso-profiles.sh"
@@ -1037,17 +1037,17 @@ check_sso_session_status() {
     local session_name="$2"
     
     if [ -z "$sso_start_url" ]; then
-        log_error "SSO Start URLが指定されていません"
+        log_error "SSO Start URL is required"
         return 1
     fi
     
-    log_info "SSO セッション状態を確認中..."
+    log_info "Checking SSO session status..."
     
     local sso_cache_dir="$HOME/.aws/sso/cache"
     
     # SSO キャッシュディレクトリの存在確認
     if [ ! -d "$sso_cache_dir" ]; then
-        log_warning "SSO キャッシュディレクトリが見つかりません: $sso_cache_dir"
+        log_warning "SSO cache directory not found: $sso_cache_dir"
         show_sso_login_command "$session_name"
         return 1
     fi
@@ -1057,7 +1057,7 @@ check_sso_session_status() {
     cache_files=$(grep -l -r "$sso_start_url" "$sso_cache_dir" 2>/dev/null || true)
     
     if [ -z "$cache_files" ]; then
-        log_warning "SSO セッションキャッシュが見つかりません"
+        log_warning "SSO session cache not found"
         show_sso_login_command "$session_name"
         return 1
     fi
@@ -1066,11 +1066,11 @@ check_sso_session_status() {
     local latest_file
     latest_file=$(echo "$cache_files" | xargs ls -t | head -n1)
     
-    log_info "SSO キャッシュファイル: $(basename "$latest_file")"
+    log_info "SSO cache file: $(basename "$latest_file")"
     
     # jqでセッション情報を取得
     if ! command -v jq &> /dev/null; then
-        log_error "jq コマンドが見つかりません。jqをインストールしてください"
+        log_error "jq command not found. Please install jq"
         return 1
     fi
     
@@ -1080,7 +1080,7 @@ check_sso_session_status() {
     expires_at=$(jq -r '.expiresAt // empty' "$latest_file" 2>/dev/null)
     
     if [ -z "$access_token" ]; then
-        log_warning "アクセストークンが見つかりません"
+        log_warning "Access token not found"
         show_sso_login_command "$session_name"
         return 1
     fi
@@ -1095,21 +1095,21 @@ check_sso_session_status() {
         printf -v current_timestamp '%(%s)T' -1
 
         if ! expires_timestamp=$(parse_utc_to_epoch "$expires_at"); then
-            log_warning "セッション有効性の自動判定をスキップしました"
-            echo "  有効期限: $local_expires"
+            log_warning "Could not auto-determine session validity (skipped)"
+            log_kv "Expires at" "$local_expires"
             return 0
         fi
 
         if [ "$expires_timestamp" -le "$current_timestamp" ]; then
-            log_error "SSO セッションが期限切れです"
+            log_error "SSO session has expired"
             show_sso_login_command "$session_name" "$local_expires"
             return 1
         else
-            log_success "SSO セッションが有効です"
-            echo "  有効期限: $local_expires"
+            log_success "SSO session is valid"
+            log_kv "Expires at" "$local_expires"
         fi
     else
-        log_success "SSO セッションが見つかりました（有効期限情報なし）"
+        log_success "SSO session found (no expiry info)"
     fi
     
     return 0

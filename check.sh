@@ -8,65 +8,65 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 show_usage() {
-    echo "使用方法: $0 [COMMAND] [OPTIONS]"
+    echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo
-    echo "コマンド:"
-    echo "  (なし)                        全ての環境チェックを実行"
-    echo "  tools                         必要ツールの確認"
-    echo "  aws-config                    AWS設定ファイルの確認"
-    echo "  sso-config [SESSION_NAME]     SSO設定の確認"
-    echo "  sso-profiles [SUBCOMMAND]     SSOプロファイルの分析"
-    echo "  cache [SUBCOMMAND]            キャッシュの統計表示・削除・検証"
-    echo "  help, -h, --help              このヘルプを表示"
+    echo "Commands:"
+    echo "  (none)                        Run all environment checks"
+    echo "  tools                         Verify required tools"
+    echo "  aws-config                    Check AWS config file"
+    echo "  sso-config [SESSION_NAME]     Check SSO configuration"
+    echo "  sso-profiles [SUBCOMMAND]     Analyze SSO profiles"
+    echo "  cache [SUBCOMMAND]            Show / clear / validate cache"
+    echo "  help, -h, --help              Show this help"
     echo
-    echo "sso-profiles のサブコマンド:"
-    echo "  analyze               全プロファイルの分析（デフォルト）"
-    echo "  auto [--all]          自動生成プロファイルの詳細表示"
-    echo "  manual [--all]        手動管理プロファイルの詳細表示"
-    echo "  duplicates            重複プロファイルの詳細チェック"
+    echo "sso-profiles subcommands:"
+    echo "  analyze               Analyze all profiles (default)"
+    echo "  auto [--all]          Show auto-generated profile details"
+    echo "  manual [--all]        Show manual profile details"
+    echo "  duplicates            Inspect duplicate profiles"
     echo
-    echo "cache のサブコマンド:"
-    echo "  stats                 キャッシュ統計を表示 (デフォルト)"
-    echo "  clear [SESSION]       全キャッシュ or セッション単位で削除"
-    echo "  validate              期限切れファイルを一覧"
+    echo "cache subcommands:"
+    echo "  stats                 Show cache statistics (default)"
+    echo "  clear [SESSION]       Clear all cache or per-session cache"
+    echo "  validate              List expired files"
     echo
-    echo "例:"
-    echo "  $0                          # 全ての環境チェック"
-    echo "  $0 tools                    # ツール確認のみ"
-    echo "  $0 aws-config               # AWS設定確認のみ"
-    echo "  $0 sso-config               # SSO設定確認のみ"
-    echo "  $0 sso-config my-session    # 特定セッションの確認"
-    echo "  $0 sso-profiles             # プロファイル分析"
-    echo "  $0 sso-profiles auto --all  # 自動生成プロファイルを全件表示"
-    echo "  $0 cache                    # キャッシュ統計"
-    echo "  $0 cache clear              # 全キャッシュ削除"
+    echo "Examples:"
+    echo "  $0                          # Run all environment checks"
+    echo "  $0 tools                    # Tools only"
+    echo "  $0 aws-config               # AWS config only"
+    echo "  $0 sso-config               # SSO config only"
+    echo "  $0 sso-config my-session    # Check a specific session"
+    echo "  $0 sso-profiles             # Profile analysis"
+    echo "  $0 sso-profiles auto --all  # Show all auto-generated profiles"
+    echo "  $0 cache                    # Cache statistics"
+    echo "  $0 cache clear              # Clear all cache"
 }
 
 run_all() {
-    echo "🔍 AWS SSO Profile Generator 環境チェックを開始します"
+    echo "🔍 AWS SSO Profile Generator environment check"
     echo "================================================"
     echo
 
-    echo "📋 Step 1: 必要ツールの確認"
+    echo "📋 Step 1: Verify required tools"
     "$SCRIPT_DIR/lib/check-tools.sh"
     echo
 
-    echo "📋 Step 2: AWS設定ファイルの確認"
+    echo "📋 Step 2: AWS config file"
     "$SCRIPT_DIR/lib/check-aws-config.sh"
     echo
 
-    echo "📋 Step 3: SSO設定の確認"
+    echo "📋 Step 3: SSO configuration"
     "$SCRIPT_DIR/lib/check-sso-config.sh"
     echo
 
-    echo "✅ AWS SSO Profile Generator 環境チェックが完了しました！"
+    echo "✅ AWS SSO Profile Generator environment check complete!"
     echo
-    echo "各チェックを個別に実行したい場合:"
-    echo "  $0 tools          - 必要ツール確認"
-    echo "  $0 aws-config     - AWS設定ファイル確認"
-    echo "  $0 sso-config     - SSO設定確認"
-    echo "  $0 sso-profiles   - プロファイル分析"
-    echo "  ./generate-sso-profiles.sh - プロファイル自動生成（メイン機能）"
+    echo "To run each check individually:"
+    echo "  $0 tools          - Verify required tools"
+    echo "  $0 aws-config     - Check AWS config file"
+    echo "  $0 sso-config     - Check SSO configuration"
+    echo "  $0 sso-profiles   - Profile analysis"
+    echo "  ./generate-sso-profiles.sh - Generate profiles (main feature)"
 }
 
 case "${1:-}" in
@@ -96,7 +96,7 @@ case "${1:-}" in
         exit 0
         ;;
     *)
-        echo "❌ 不明なコマンド: $1"
+        echo "❌ Unknown command: $1"
         echo
         show_usage
         exit 1

@@ -30,8 +30,8 @@ cleanup_temp_files() {
     type -t release_lock >/dev/null 2>&1 && release_lock || true
 }
 # Ctrl+C / kill 受信時もクリーンアップして適切に終了
-trap 'cleanup_temp_files; echo; log_warning "中断されました"; exit 130' INT
-trap 'cleanup_temp_files; echo; log_warning "終了シグナルを受信しました"; exit 143' TERM
+trap 'cleanup_temp_files; echo; log_warning "Interrupted"; exit 130' INT
+trap 'cleanup_temp_files; echo; log_warning "Termination signal received"; exit 143' TERM
 trap cleanup_temp_files EXIT
 
 
@@ -39,30 +39,30 @@ trap cleanup_temp_files EXIT
 # 出力: "<account_id> <account_name>" の改行区切り
 get_accounts_data() {
     if [ -z "$ACCESS_TOKEN" ]; then
-        log_debug "ACCESS_TOKEN が設定されていません"
+        log_debug "ACCESS_TOKEN is not set"
         return 1
     fi
 
     local accounts_json
     if ! accounts_json=$(get_cached_accounts "$SSO_SESSION_NAME" "$SSO_START_URL" "$ACCESS_TOKEN"); then
-        log_debug "get_cached_accounts が失敗しました"
+        log_debug "get_cached_accounts failed"
         return 1
     fi
 
     echo "$accounts_json" | jq -r '.accountList[] | "\(.accountId) \(.accountName)"'
 }
 
-# AWS CLI SSO: ListAccounts (ログ付き版)
+# AWS CLI SSO: ListAccounts (with logging)
 list_accounts() {
-    log_info "アカウント一覧を取得中..."
+    log_info "Fetching account list..."
 
     local accounts_data
     if accounts_data=$(get_accounts_data); then
-        log_success "アカウント一覧を取得しました"
+        log_success "Account list fetched"
         echo "$accounts_data"
         return 0
     else
-        log_error "アカウント一覧の取得に失敗しました"
+        log_error "Failed to fetch account list"
         show_sso_login_command "$SSO_SESSION_NAME"
         return 1
     fi
@@ -90,19 +90,19 @@ list_account_roles() {
     local account_id="$1"
 
     if [ -z "$account_id" ]; then
-        log_error "アカウントIDが指定されていません"
+        log_error "Account ID is required"
         return 1
     fi
 
-    log_info "アカウント $account_id のロール一覧を取得中..."
+    log_info "Fetching roles for account $account_id..."
 
     local roles_data
     if roles_data=$(get_account_roles_data "$account_id"); then
-        log_success "ロール一覧を取得しました"
+        log_success "Roles fetched"
         echo "$roles_data"
         return 0
     else
-        log_error "ロール一覧の取得に失敗しました"
+        log_error "Failed to fetch roles"
         return 1
     fi
 }
@@ -190,12 +190,12 @@ remove_generated_blocks() {
         if ! verify_marker_integrity "$config_file"; then
             return 1
         fi
-        log_info "既存の自動生成ブロックを削除中..."
+        log_info "Removing existing auto-generated block..."
         sed -i.tmp '/^# AWS_SSO_CONFIG_GENERATOR START/,/^# AWS_SSO_CONFIG_GENERATOR END/d' "$config_file"
         rm -f "${config_file}.tmp"
         # sed が残す末尾空行を整理 (再実行ごとの空行累積を防ぐ)
         trim_trailing_empty_lines "$config_file"
-        log_success "既存の自動生成ブロックを削除しました"
+        log_success "Existing auto-generated block removed"
     fi
 }
 
@@ -212,9 +212,9 @@ generate_profiles_for_accounts() {
     local dry_run="${6:-false}"
 
     if [ "$dry_run" = true ]; then
-        log_info "DRY-RUN モード: 最大 $max_accounts アカウント分のプレビューを表示します..."
+        log_info "DRY-RUN mode: previewing up to $max_accounts accounts..."
     else
-        log_info "最大 $max_accounts 個のアカウントでプロファイルを生成します..."
+        log_info "Generating profiles for up to $max_accounts accounts..."
     fi
 
     # 全体計測の開始
@@ -233,7 +233,7 @@ generate_profiles_for_accounts() {
 
     local accounts_data
     if ! accounts_data=$(get_accounts_data); then
-        log_error "アカウント一覧の取得に失敗しました"
+        log_error "Failed to fetch account list"
         return 1
     fi
 
@@ -247,7 +247,7 @@ generate_profiles_for_accounts() {
         local _before _after
         _before=$(echo "$accounts_data" | grep -c . 2>/dev/null || true)
         _after=$(echo "$_filtered" | grep -c . 2>/dev/null || true)
-        log_info "--account-filter '$ACCOUNT_FILTER' でアカウントを絞り込み: ${_before:-0} → ${_after:-0}"
+        log_info "--account-filter '$ACCOUNT_FILTER' applied: ${_before:-0} -> ${_after:-0} accounts"
         accounts_data="$_filtered"
     fi
 
@@ -256,7 +256,7 @@ generate_profiles_for_accounts() {
     total_accounts=$(echo "$accounts_data" | grep -c . 2>/dev/null || true)
     total_accounts=${total_accounts:-0}
     if [ "$total_accounts" -eq 0 ]; then
-        log_error "対象アカウントが 0 件です (--account-filter のパターンを確認してください)"
+        log_error "No accounts to process (check your --account-filter pattern)"
         return 1
     fi
     if [ "$total_accounts" -gt "$max_accounts" ]; then
@@ -273,12 +273,12 @@ generate_profiles_for_accounts() {
             local backup_file
             backup_file="${config_file}.backup.$(date +%Y%m%d_%H%M%S)"
             cp "$config_file" "$backup_file"
-            log_info "設定ファイルをバックアップしました: $backup_file"
+            log_info "Config file backed up to: $backup_file"
             rotate_backups "$config_file" 10
         fi
 
         if ! remove_generated_blocks "$config_file"; then
-            log_error "既存ブロックの削除に失敗したため生成処理を中止します"
+            log_error "Failed to remove existing block; aborting"
             return 1
         fi
 
@@ -298,7 +298,7 @@ generate_profiles_for_accounts() {
     # 並列度: --parallel フラグ > PARALLEL 環境変数 > デフォルト 8
     parallel="${PARALLEL_OPT:-${PARALLEL:-8}}"
     if ! [[ "$parallel" =~ ^[0-9]+$ ]] || [ "$parallel" -lt 1 ]; then
-        log_warning "不正な並列度 '$parallel'。デフォルト 8 を使用します"
+        log_warning "Invalid parallel value '$parallel'; falling back to 8"
         parallel=8
     fi
 
@@ -312,8 +312,7 @@ generate_profiles_for_accounts() {
     t_phase2_start=$(perf_now)
 
     echo
-    log_info "Phase 2: ロール取得 (並列度 $parallel, 対象 $total_accounts アカウント)"
-    echo
+    log_info "Phase 2: fetch roles (parallel=$parallel, $total_accounts accounts)"
 
     printf "%s" "$HIDE_CURSOR"
 
@@ -376,7 +375,7 @@ generate_profiles_for_accounts() {
     # worker (lib/fetch-account-roles.sh) は ~870 行の common.sh を毎回 source するため
     # spawn コスト ~400ms。bash -c なら ~30-50ms で済み、cache hit ケースが大幅高速化。
     if [ "$hit_n" -gt 0 ]; then
-        log_info "キャッシュヒット ${hit_n} アカウントを軽量並列で処理 (並列度 ${parallel})..."
+        log_info "Cache hit: processing ${hit_n} accounts inline (parallel=${parallel})..."
         export _CACHE_DIR_X="$CACHE_DIR"
         export _SESSION_HASH_X="$session_hash"
         export _ROLES_TMPDIR_X="$roles_tmpdir"
@@ -388,7 +387,7 @@ generate_profiles_for_accounts() {
                 if jq -r ".roleList[].roleName" < "$cf" > "${_ROLES_TMPDIR_X}/${aid}.roles" 2>/dev/null; then
                     printf "hit %s\n" "$aid"
                 else
-                    printf "%s\n" "ロール JSON 解析失敗" > "${_ROLES_TMPDIR_X}/${aid}.err"
+                    printf "%s\n" "Failed to parse roles JSON" > "${_ROLES_TMPDIR_X}/${aid}.err"
                     printf "err %s jq_parse_failed\n" "$aid"
                 fi
             ' _ {} \
@@ -400,7 +399,7 @@ generate_profiles_for_accounts() {
             local done_count
             done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
                 \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
-            show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中 (cache)"
+            show_progress_with_counter "$done_count" "$total_accounts" "Fetching roles (cache)"
             sleep 0.3
         done
         wait "$inline_pid" || true
@@ -408,7 +407,7 @@ generate_profiles_for_accounts() {
 
     # === Worker 並列処理: キャッシュ未ヒットのみ (フル機能の worker = API 呼び出し対応) ===
     if [ "$miss_n" -gt 0 ]; then
-        log_info "キャッシュ未ヒット ${miss_n} アカウントを並列度 ${parallel} で取得中..."
+        log_info "Cache miss: fetching ${miss_n} accounts via AWS API (parallel=${parallel})..."
         printf '%s\n' "${miss_list[@]}" | xargs -P "$parallel" -I {} \
             bash "$worker" {} "$roles_tmpdir" \
             >> "$xargs_log" 2>&1 &
@@ -418,13 +417,13 @@ generate_profiles_for_accounts() {
             local done_count
             done_count=$(find "$roles_tmpdir" -maxdepth 1 -type f \
                 \( -name "*.roles" -o -name "*.err" \) 2>/dev/null | wc -l | tr -d ' ')
-            show_progress_with_counter "$done_count" "$total_accounts" "ロール取得中 (API)"
+            show_progress_with_counter "$done_count" "$total_accounts" "Fetching roles (API)"
             sleep 0.3
         done
         wait "$xargs_pid" || true
     fi
 
-    show_progress_complete "$total_accounts" "ロール取得完了"
+    show_progress_complete "$total_accounts" "Phase 2 complete"
 
     # キャッシュ統計 (ログとサマリ表示)
     local hit_count fetch_count err_count
@@ -434,9 +433,8 @@ generate_profiles_for_accounts() {
     hit_count=${hit_count:-0}
     fetch_count=${fetch_count:-0}
     err_count=${err_count:-0}
-    log_to_file "Phase 2 統計: cache hit=$hit_count / API fetch=$fetch_count / error=$err_count"
-    echo
-    log_info "キャッシュヒット: $hit_count / API 取得: $fetch_count / 失敗: $err_count"
+    log_to_file "Phase 2 stats: cache hit=$hit_count / API fetch=$fetch_count / error=$err_count"
+    log_info "Cache hit: $hit_count / API fetch: $fetch_count / errors: $err_count"
 
     # Phase 2 完了 → Phase 3 開始 (timing)
     local t_phase2 t_phase3_start
@@ -451,8 +449,7 @@ generate_profiles_for_accounts() {
     echo "$accounts_subset" > "$temp_accounts_file"
 
     echo
-    log_info "Phase 3: プロファイル設定書き込み"
-    echo
+    log_info "Phase 3: writing profile configs"
 
     local count=0
     local total_profiles=0
@@ -469,7 +466,7 @@ generate_profiles_for_accounts() {
             continue
         fi
 
-        show_progress_with_counter "$((count + 1))" "$total_accounts" "書き込み中: $account_name"
+        show_progress_with_counter "$((count + 1))" "$total_accounts" "Writing: $account_name"
 
         local roles_file="${roles_tmpdir}/${account_id}.roles"
         local err_file="${roles_tmpdir}/${account_id}.err"
@@ -489,26 +486,26 @@ generate_profiles_for_accounts() {
                         create_profile_config "$config_file" "$profile_name" "$account_id" "$role_name" "$region"
                     fi
                     generated_profiles+=("$profile_name")
-                    log_to_file "✅ プロファイル作成: $profile_name"
+                    log_to_file "✅ Profile created: $profile_name"
                     role_count=$((role_count + 1))
                     total_profiles=$((total_profiles + 1))
                 fi
             done < "$roles_file"
-            log_to_file "アカウント $account_name: $role_count 個のプロファイルを処理"
+            log_to_file "Account $account_name: $role_count profiles processed"
         elif [ -f "$err_file" ]; then
             failed_accounts+=("$account_name ($account_id)")
             local err_detail
             err_detail=$(head -n1 "$err_file")
-            log_to_file "⚠️ アカウント $account_name のロール取得に失敗: $err_detail"
+            log_to_file "⚠️ Account $account_name failed to fetch roles: $err_detail"
         else
             failed_accounts+=("$account_name ($account_id)")
-            log_to_file "⚠️ アカウント $account_name の結果ファイルが見つかりません"
+            log_to_file "⚠️ Account $account_name has no result file"
         fi
 
         count=$((count + 1))
     done < "$temp_accounts_file"
 
-    show_progress_complete "$total_accounts" "プロファイル生成完了"
+    show_progress_complete "$total_accounts" "Phase 3 complete"
 
     if [ "$dry_run" != true ]; then
         add_batch_end_comment "$config_file"
@@ -523,22 +520,22 @@ generate_profiles_for_accounts() {
 
     echo
     if [ "$dry_run" = true ]; then
-        log_success "DRY-RUN: $total_profiles 個のプロファイルが生成される予定です (設定ファイルは未変更)"
+        log_success "DRY-RUN: $total_profiles profiles would be generated (config file unchanged)"
         # プレビュー: 先頭 10 件 + 末尾省略表示
         if [ "$total_profiles" -gt 0 ]; then
-            echo "  ▼ プレビュー (先頭 10 件):"
+            echo "  ▼ Preview (first 10):"
             local _i
             for _i in "${generated_profiles[@]:0:10}"; do
                 echo "    [profile $_i]"
             done
             if [ "$total_profiles" -gt 10 ]; then
-                echo "    ... (残り $((total_profiles - 10)) 件はログファイルを参照)"
+                echo "    ... ($((total_profiles - 10)) more, see log file)"
             fi
         fi
     else
-        log_success "合計 $total_profiles 個のプロファイルを作成しました"
+        log_success "Generated $total_profiles profiles in total"
     fi
-    log_info "処理時間: 全体 ${t_total}s (Phase1: ${t_phase1}s / Phase2: ${t_phase2}s / Phase3: ${t_phase3}s)"
+    log_info "Elapsed: total ${t_total}s (Phase1: ${t_phase1}s / Phase2: ${t_phase2}s / Phase3: ${t_phase3}s)"
 
     # === Diff 表示 (前回の自動生成プロファイル vs 今回) ===
     local _diff_after_file _added _removed _unchanged _added_count _removed_count _unchanged_count
@@ -558,29 +555,29 @@ generate_profiles_for_accounts() {
 
     # 初回実行は前回データなし → "初回生成" 扱い
     if [ ! -s "$_diff_before_file" ]; then
-        log_to_file "Diff: 初回生成 (新規 $total_profiles 件)"
+        log_to_file "Diff: initial generation (new: $total_profiles)"
     else
-        log_to_file "Diff: 追加=$_added_count / 削除=$_removed_count / 変更なし=$_unchanged_count"
+        log_to_file "Diff: added=$_added_count / removed=$_removed_count / unchanged=$_unchanged_count"
     fi
 
     echo
     if [ ! -s "$_diff_before_file" ]; then
-        log_info "📋 初回生成: 新規 $total_profiles プロファイル"
+        log_info "📋 Initial generation: $total_profiles new profiles"
     elif [ "$_added_count" -eq 0 ] && [ "$_removed_count" -eq 0 ]; then
-        log_info "📋 前回と同一 (変更なし: $_unchanged_count プロファイル)"
+        log_info "📋 No changes since last run ($_unchanged_count profiles)"
     else
-        log_info "📋 前回からの差分:"
+        log_info "📋 Diff from last run:"
         if [ "$_added_count" -gt 0 ]; then
-            echo "   + $_added_count 件 追加"
+            echo "   + $_added_count added"
             printf '%s\n' "$_added" | head -5 | sed 's/^/     + /'
-            [ "$_added_count" -gt 5 ] && echo "     ... (残り $((_added_count - 5)) 件はログ参照)"
+            [ "$_added_count" -gt 5 ] && echo "     ... ($((_added_count - 5)) more, see log)"
         fi
         if [ "$_removed_count" -gt 0 ]; then
-            echo "   - $_removed_count 件 削除"
+            echo "   - $_removed_count removed"
             printf '%s\n' "$_removed" | head -5 | sed 's/^/     - /'
-            [ "$_removed_count" -gt 5 ] && echo "     ... (残り $((_removed_count - 5)) 件はログ参照)"
+            [ "$_removed_count" -gt 5 ] && echo "     ... ($((_removed_count - 5)) more, see log)"
         fi
-        echo "   = $_unchanged_count 件 変更なし"
+        echo "   = $_unchanged_count unchanged"
 
         # 追加/削除の完全リストはログにのみ出す
         if [ -n "$_added" ]; then
@@ -598,80 +595,80 @@ generate_profiles_for_accounts() {
     # 失敗アカウントの集約報告
     if [ "${#failed_accounts[@]}" -gt 0 ]; then
         echo
-        log_warning "ロール取得に失敗したアカウント (${#failed_accounts[@]} 個):"
+        log_warning "Accounts that failed to fetch roles (${#failed_accounts[@]}):"
         local acct
         for acct in "${failed_accounts[@]}"; do
             echo "  - $acct"
         done
-        log_info "詳細は ${LOG_FILE} を参照してください"
+        log_info "See ${LOG_FILE} for details"
     fi
 }
 
 # ヘルプメッセージの表示
 show_usage() {
-    echo "使用方法: $0 [OPTIONS]"
+    echo "Usage: $0 [OPTIONS]"
     echo
-    echo "AWS SSO プロファイルの自動生成を行います。"
-    echo "実行のたびに既存の自動生成ブロックを削除してから再生成します。"
+    echo "Auto-generate AWS SSO profiles in ~/.aws/config."
+    echo "On each run, the existing auto-generated block is removed and re-created."
     echo
-    echo "オプション:"
-    echo "  --help, -h          このヘルプメッセージを表示"
-    echo "  --force, -f         デフォルト値で自動実行（対話なし）"
-    echo "  --refresh-cache     既存キャッシュを削除してから API を再取得"
-    echo "  --parallel N        並列度 (省略時 PARALLEL 環境変数または 8)"
-    echo "  --dry-run           設定ファイルを変更せず、生成予定のプロファイルだけ表示"
-    echo "  --account-filter PATTERN  アカウント名を glob で絞り込み (例: 'prod-*')"
-    echo "  --role-filter PATTERN     ロール名を glob で絞り込み (例: 'AWSReadOnly*')"
+    echo "Options:"
+    echo "  --help, -h           Show this help message"
+    echo "  --force, -f          Run with default values (non-interactive)"
+    echo "  --refresh-cache      Clear cache then re-fetch from AWS API"
+    echo "  --parallel N         Parallelism (default: PARALLEL env var or 8)"
+    echo "  --dry-run            Preview profiles without modifying the config file"
+    echo "  --account-filter PATTERN  Filter accounts by name glob (e.g. 'prod-*')"
+    echo "  --role-filter PATTERN     Filter roles by name glob (e.g. 'AWSReadOnly*')"
     echo
-    echo "例:"
-    echo "  $0                  # 対話モードで実行"
-    echo "  $0 --force          # デフォルト値で自動実行"
-    echo "  $0 --refresh-cache  # キャッシュ無効化してから実行"
-    echo "  $0 --parallel 16    # 並列度 16 で実行"
-    echo "  $0 --dry-run --force # プレビューのみ (実ファイル変更なし)"
-    echo "  $0 --help           # ヘルプを表示"
+    echo "Examples:"
+    echo "  $0                   # Interactive mode"
+    echo "  $0 --force           # Non-interactive with defaults"
+    echo "  $0 --refresh-cache   # Invalidate cache and re-fetch"
+    echo "  $0 --parallel 16     # Run with parallelism 16"
+    echo "  $0 --dry-run --force # Preview only (no file changes)"
+    echo "  $0 --help            # Show help"
     echo
-    echo "キャッシュ:"
-    echo "  AWS SSO API レスポンスを ${CACHE_DIR:-.aws-sso-cache} に保存します"
-    echo "  デフォルト TTL: ${CACHE_EXPIRY_HOURS:-24} 時間"
-    echo "  環境変数: CACHE_DIR / CACHE_EXPIRY_HOURS で上書き可能"
+    echo "Cache:"
+    echo "  AWS SSO API responses are stored in ${CACHE_DIR:-.aws-sso-cache}"
+    echo "  Default TTL: ${CACHE_EXPIRY_HOURS:-24} hours"
+    echo "  Env vars: CACHE_DIR / CACHE_EXPIRY_HOURS"
     echo
-    echo "並列処理:"
-    echo "  list-account-roles をアカウント単位で並列実行します"
-    echo "  AWS SSO Portal API の経験的安全圏 (5-10) からデフォルト 8 を採用"
-    echo "  環境変数 PARALLEL でも上書き可能 (--parallel フラグが優先)"
+    echo "Parallel processing:"
+    echo "  list-account-roles is parallelized per account"
+    echo "  Default 8 is within AWS SSO Portal API's safe range (5-10 concurrent)"
+    echo "  Env var PARALLEL also works (--parallel flag takes precedence)"
     echo
-    echo "デフォルト設定:"
-    echo "  プレフィックス: awssso"
-    echo "  処理アカウント数: 利用可能な全アカウント"
-    echo "  リージョン: SSO設定から取得"
-    echo "  正規化方式: minimal（スペース→アンダースコアのみ）"
+    echo "Defaults:"
+    echo "  Prefix:       awssso"
+    echo "  Max accounts: all available"
+    echo "  Region:       from SSO config"
+    echo "  Normalization: minimal (space -> underscore only)"
     echo
-    echo "注意事項:"
-    echo "  - AWS SSO セッションが有効である必要があります"
-    echo "  - 実行前に設定ファイルのバックアップが自動作成されます"
-    echo "  - 既存の自動生成プロファイルは削除されてから再生成されます"
+    echo "Notes:"
+    echo "  - An active AWS SSO session is required"
+    echo "  - The config file is automatically backed up before changes"
+    echo "  - Existing auto-generated profiles are removed and re-created"
 }
 
 # AWS_PROFILE環境変数のチェックと処理
 check_and_handle_aws_profile() {
     if [ -n "${AWS_PROFILE:-}" ]; then
-        log_warning "AWS_PROFILE環境変数が設定されています: $AWS_PROFILE"
+        log_warning "AWS_PROFILE is set: $AWS_PROFILE"
         echo
-        log_info "AWS_PROFILEが設定されていると、以下の問題が発生する可能性があります:"
-        echo "  - 指定されたプロファイルが存在しない場合、AWS SSOコマンドが失敗"
-        echo "  - プロファイル削除後の再生成時にエラーが発生"
-        echo "  - 意図しないプロファイルでのAWS API呼び出し"
+        log_info "When AWS_PROFILE is set, the following issues may occur:"
+        echo "  - AWS SSO commands fail if the profile does not exist"
+        echo "  - Errors after profile deletion during regeneration"
+        echo "  - Unintended AWS API calls under the wrong profile"
         echo
-        log_info "安全のため、AWS_PROFILE環境変数を一時的にunsetして続行します"
+        log_info "Unsetting AWS_PROFILE temporarily for safety..."
 
         # 元の値を保存（情報表示用）
         local original_aws_profile="$AWS_PROFILE"
         unset AWS_PROFILE
 
-        log_success "AWS_PROFILE環境変数をunsetしました"
-        log_info "元の値: $original_aws_profile"
-        log_info "このスクリプト終了後、AWS_PROFILEは元の状態に戻ります"
+        log_success "AWS_PROFILE has been unset"
+        log_info "Original value: $original_aws_profile"
+        log_info "AWS_PROFILE will be restored after this script exits"
         echo
     fi
 }
@@ -703,7 +700,7 @@ main() {
                 ;;
             --account-filter)
                 if [ $# -lt 2 ]; then
-                    log_error "--account-filter には glob パターンを指定してください (例: 'prod-*')"
+                    log_error "--account-filter requires a glob pattern (e.g. 'prod-*')"
                     exit 1
                 fi
                 export ACCOUNT_FILTER="$2"
@@ -711,7 +708,7 @@ main() {
                 ;;
             --role-filter)
                 if [ $# -lt 2 ]; then
-                    log_error "--role-filter には glob パターンを指定してください (例: 'AWSReadOnly*')"
+                    log_error "--role-filter requires a glob pattern (e.g. 'AWSReadOnly*')"
                     exit 1
                 fi
                 export ROLE_FILTER="$2"
@@ -719,11 +716,11 @@ main() {
                 ;;
             --parallel)
                 if [ $# -lt 2 ]; then
-                    log_error "--parallel には数値引数が必要です"
+                    log_error "--parallel requires a numeric argument"
                     exit 1
                 fi
                 if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -lt 1 ]; then
-                    log_error "--parallel の値は 1 以上の整数で指定してください: $2"
+                    log_error "--parallel value must be an integer >= 1: $2"
                     exit 1
                 fi
                 # generate_profiles_for_accounts は PARALLEL_OPT を最優先で読む
@@ -731,7 +728,7 @@ main() {
                 shift 2
                 ;;
             *)
-                log_error "不明なオプション: $1"
+                log_error "Unknown option: $1"
                 echo
                 show_usage
                 exit 1
@@ -739,26 +736,26 @@ main() {
         esac
     done
 
-    echo "🔄 AWS SSO プロファイル自動生成"
+    echo "🔄 AWS SSO Profile Generator"
     echo "==============================="
     echo
 
     # 並行実行ガード (mkdir ベース advisory lock)
     # ~/.aws/.aws-sso-pg.lock があれば二重起動とみなし即座に終了
     if ! acquire_lock; then
-        log_error "他のプロセスが実行中です (ロックディレクトリ: \$HOME/.aws/.aws-sso-pg.lock)"
-        log_info "別のターミナルで generate-sso-profiles.sh が動作中の可能性があります"
-        log_info "強制解除する場合: rm -rf \"\$HOME/.aws/.aws-sso-pg.lock\""
+        log_error "Another instance is running (lock dir: \$HOME/.aws/.aws-sso-pg.lock)"
+        log_info "generate-sso-profiles.sh may be running in another terminal"
+        log_info "To force-remove the lock: rm -rf \"\$HOME/.aws/.aws-sso-pg.lock\""
         exit 1
     fi
 
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: デフォルト値で自動実行します"
+        log_info "Force mode: running with defaults"
         echo
     fi
 
     if [ "$refresh_cache" = true ]; then
-        log_info "--refresh-cache: 既存キャッシュを削除します"
+        log_info "--refresh-cache: clearing existing cache"
         clear_cache
         echo
     fi
@@ -769,42 +766,41 @@ main() {
     # ログファイルの初期化
     LOG_FILE="${HOME}/.aws/sso-profile-generator-$(date +%Y%m%d_%H%M%S).log"
     echo "# AWS SSO Profile Generator Log - $(get_current_datetime)" > "$LOG_FILE"
-    log_info "ログファイル: $LOG_FILE"
+    log_info "Log file: $LOG_FILE"
     # ログファイルローテーション (最新 N 件保持、デフォルト 30)
-    rotate_files_by_pattern "${HOME}/.aws/sso-profile-generator-*.log" "${LOG_KEEP_COUNT:-30}" "ログファイル"
+    rotate_files_by_pattern "${HOME}/.aws/sso-profile-generator-*.log" "${LOG_KEEP_COUNT:-30}" "Log files"
 
     # 設定ファイルの取得
     local config_file
     config_file=$(get_config_file)
 
-    log_info "設定ファイル: $config_file"
+    log_info "Config file: $config_file"
 
     # SSO設定の取得
     if ! get_sso_config "$config_file"; then
         exit 1
     fi
 
-    log_success "SSO設定を取得しました"
-    echo "  セッション名: $SSO_SESSION_NAME"
-    echo "  リージョン: $SSO_REGION"
-    echo "  Start URL: $SSO_START_URL"
+    log_success "SSO config loaded"
+    log_kv "Session"        "$SSO_SESSION_NAME"
+    log_kv "Region"         "$SSO_REGION"
+    log_kv "Start URL"      "$SSO_START_URL"
     echo
 
     # アクセストークンの取得
     if ! get_access_token "$SSO_START_URL"; then
         echo
-        log_error "SSO セッションが無効です。プロファイル生成を続行できません。"
+        log_error "SSO session is invalid. Cannot proceed with profile generation."
         show_sso_login_command "$SSO_SESSION_NAME"
         echo
-        log_info "ログイン後、再度このスクリプトを実行してください。"
+        log_info "After logging in, run this script again."
         exit 1
     fi
 
     echo
 
     # プロファイル自動生成の実行
-    echo
-    log_info "プロファイル自動生成を開始します..."
+    log_info "Starting profile generation..."
 
     # デフォルト設定
     local prefix="awssso"
@@ -813,9 +809,9 @@ main() {
     # ユーザー入力の取得
     echo
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: プレフィックス '$prefix' を使用します"
+        log_info "Force mode: using prefix '$prefix'"
     else
-        read -r -p "プロファイル名のプレフィックス (デフォルト: $prefix): " user_prefix
+        read -r -p "Profile name prefix (default: $prefix): " user_prefix
         prefix=${user_prefix:-$prefix}
     fi
 
@@ -823,52 +819,52 @@ main() {
     echo
     local available_accounts_data
     local max_accounts
-    log_info "利用可能なアカウント数を確認中..."
+    log_info "Checking available accounts..."
 
     if available_accounts_data=$(get_accounts_data); then
         local available_count
         available_count=$(echo "$available_accounts_data" | wc -l | tr -d ' ')
-        log_success "利用可能なアカウント数: $available_count 個"
+        log_success "Available accounts: $available_count"
 
         # デフォルト値を利用可能な全アカウント数に設定
         max_accounts="$available_count"
     else
-        log_warning "アカウント数の取得に失敗しました。"
-        log_info "考えられる原因:"
-        echo "  - SSO セッションが期限切れ"
-        echo "  - AWS CLI の設定に問題がある"
-        echo "  - ネットワーク接続の問題"
-        log_info "デバッグモード実行: DEBUG=1 ./generate-sso-profiles.sh"
+        log_warning "Failed to fetch account list."
+        log_info "Possible causes:"
+        echo "  - SSO session has expired"
+        echo "  - AWS CLI configuration issue"
+        echo "  - Network connectivity problem"
+        log_info "Debug mode: DEBUG=1 ./generate-sso-profiles.sh"
 
         # フォールバック値として5を設定
         max_accounts=5
-        log_info "フォールバック値として $max_accounts 個のアカウントを設定しました"
+        log_info "Falling back to $max_accounts accounts"
     fi
 
     echo
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: 処理アカウント数 $max_accounts 個（全アカウント）を使用します"
+        log_info "Force mode: processing all $max_accounts accounts"
     else
-        read -r -p "処理するアカウント数 (デフォルト: $max_accounts - 全アカウント): " user_max_accounts
+        read -r -p "Number of accounts to process (default: $max_accounts - all): " user_max_accounts
         max_accounts=${user_max_accounts:-$max_accounts}
     fi
 
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: デフォルトリージョン '$region' を使用します"
+        log_info "Force mode: default region '$region'"
     else
-        read -r -p "デフォルトリージョン (デフォルト: $region): " user_region
+        read -r -p "Default region (default: $region): " user_region
         region=${user_region:-$region}
     fi
 
     local normalization_type="minimal"
     if [ "$force_mode" = true ]; then
-        log_info "フォースモード: 正規化方式 'minimal' を使用します"
+        log_info "Force mode: normalization 'minimal'"
     else
         echo
-        echo "アカウント名の正規化方式を選択してください:"
-        echo "  1. minimal - スペース→アンダースコアのみ（大文字・ハイフンはそのまま）"
-        echo "  2. full    - 小文字変換 + ハイフン→アンダースコア + スペース→アンダースコア"
-        read -r -p "正規化方式 (1 または 2, デフォルト: 1): " normalization_choice
+        echo "Select account name normalization:"
+        echo "  1. minimal - space -> underscore only (preserves case and hyphens)"
+        echo "  2. full    - lowercase + hyphen -> underscore + space -> underscore"
+        read -r -p "Normalization (1 or 2, default: 1): " normalization_choice
 
         if [ "${normalization_choice:-}" = "2" ]; then
             normalization_type="full"
@@ -876,43 +872,42 @@ main() {
     fi
 
     echo
-    log_info "設定内容:"
-    echo "  プレフィックス: $prefix"
-    echo "  処理アカウント数: $max_accounts"
-    echo "  デフォルトリージョン: $region"
-    echo "  正規化方式: $normalization_type"
+    log_info "Settings:"
+    log_kv "Prefix"        "$prefix"
+    log_kv "Max accounts"  "$max_accounts"
+    log_kv "Region"        "$region"
+    log_kv "Normalization" "$normalization_type"
     echo
 
     # 正規化例を表示
-    echo "正規化例:"
-    echo "  元の名前: 'My Perfect-Web-Service Prod'"
+    echo "Normalization examples:"
+    echo "  Original: 'My Perfect-Web-Service Prod'"
     echo "  full:     '$(normalize_account_name_full "My Perfect-Web-Service Prod")'"
     echo "  minimal:  '$(normalize_account_name_minimal "My Perfect-Web-Service Prod")'"
     echo
 
-    echo
     if [ "$force_mode" = true ]; then
         if [ "$dry_run" = true ]; then
-            log_info "フォース + DRY-RUN: 設定ファイルは変更されません (プレビューのみ)"
+            log_info "Force + DRY-RUN: config file will not be modified (preview only)"
         else
-            log_info "フォースモード: 既存の自動生成ブロックを削除して再生成します"
+            log_info "Force mode: removing existing block and regenerating"
         fi
         generate_profiles_for_accounts "$config_file" "$prefix" "$max_accounts" "$region" "$normalization_type" "$dry_run"
         update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
         echo
         if [ "$dry_run" = true ]; then
-            log_success "DRY-RUN 完了 (実際の書き込みは行われませんでした)"
+            log_success "DRY-RUN complete (no files were modified)"
         else
-            log_success "プロファイル自動生成が完了しました！"
-            log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+            log_success "Profile generation complete!"
+            log_info "To list generated profiles: aws configure list-profiles"
         fi
-        log_info "詳細ログ: $LOG_FILE"
+        log_info "Detail log: $LOG_FILE"
     else
         local prompt_msg
         if [ "$dry_run" = true ]; then
-            prompt_msg="この設定で DRY-RUN を実行しますか？ (y/n): "
+            prompt_msg="Run DRY-RUN with these settings? (y/n): "
         else
-            prompt_msg="この設定でプロファイルを生成しますか？ (y/n): "
+            prompt_msg="Generate profiles with these settings? (y/n): "
         fi
         read -r -p "$prompt_msg" confirm
         if [[ "$confirm" =~ ^[Yy]$ ]]; then
@@ -920,14 +915,14 @@ main() {
             update_cache_metadata "$SSO_SESSION_NAME" "$SSO_START_URL" || true
             echo
             if [ "$dry_run" = true ]; then
-                log_success "DRY-RUN 完了 (実際の書き込みは行われませんでした)"
+                log_success "DRY-RUN complete (no files were modified)"
             else
-                log_success "プロファイル自動生成が完了しました！"
-                log_info "生成されたプロファイルを確認するには: aws configure list-profiles"
+                log_success "Profile generation complete!"
+                log_info "To list generated profiles: aws configure list-profiles"
             fi
-            log_info "詳細ログ: $LOG_FILE"
+            log_info "Detail log: $LOG_FILE"
         else
-            log_info "プロファイル生成をキャンセルしました"
+            log_info "Profile generation cancelled"
         fi
     fi
 }

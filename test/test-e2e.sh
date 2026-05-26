@@ -257,7 +257,7 @@ md5_after=$(md5 -q "$AWS_CONFIG_FILE" 2>/dev/null || md5sum "$AWS_CONFIG_FILE" |
 
 assert "--dry-run で config の md5 が不変" [ "$md5_before" = "$md5_after" ]
 assert "--dry-run 出力に DRY-RUN マーカーが含まれる" grep -q "DRY-RUN" "$RUN_LOG"
-assert "--dry-run プレビューに 16 件と表示される" grep -q "16 個のプロファイルが生成される予定" "$RUN_LOG"
+assert "--dry-run プレビューに 16 件と表示される" grep -q "16 profiles would be generated" "$RUN_LOG"
 
 # ============================================================================
 # Test 5: Diff 表示 (再実行で「変更なし」と出る)
@@ -272,7 +272,7 @@ else
     echo "  ❌ Test 5 実行が異常終了"
     FAIL=$((FAIL + 1))
 fi
-assert "Diff: 前回と同一 (変更なし)" grep -q "前回と同一" "$RUN_LOG"
+assert "Diff: 前回と同一 (変更なし)" grep -q "No changes since last run" "$RUN_LOG"
 
 # ============================================================================
 # 結果サマリ

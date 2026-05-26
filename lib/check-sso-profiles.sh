@@ -106,27 +106,27 @@ check_duplicate_profiles() {
     
     if [ -n "$duplicates" ]; then
         echo
-        echo "⚠️  重複プロファイル検出:"
+        echo "⚠️  Duplicate profiles detected:"
         local duplicate_count
         duplicate_count=$(echo "$duplicates" | wc -l | tr -d ' ')
-        echo "  重複プロファイル数: $duplicate_count 個"
+        echo "  Duplicate count: $duplicate_count"
         echo
-        echo "  重複しているプロファイル名:"
+        echo "  Duplicate profile names:"
         echo "$duplicates" | while IFS= read -r profile; do
             if [ -n "$profile" ]; then
                 # 重複回数を取得
                 local count
                 count=$(echo "$all_profiles" | grep -c "^$profile$")
-                echo "    - $profile (${count}回定義)"
+                echo "    - $profile (defined ${count} times)"
             fi
         done
         echo
-        log_warning "重複プロファイルが検出されました"
-        log_info "重複プロファイルは予期しない動作の原因となる可能性があります"
-        log_info "設定ファイルを確認して重複を解消することを推奨します"
+        log_warning "Duplicate profiles detected"
+        log_info "Duplicate profiles may cause unexpected behavior"
+        log_info "Edit the config file to resolve duplicates"
     else
         echo
-        echo "✅ 重複プロファイルチェック: 重複なし"
+        echo "✅ Duplicate check: no duplicates"
     fi
 }
 
@@ -134,13 +134,13 @@ check_duplicate_profiles() {
 analyze_profiles() {
     local config_file="$1"
     
-    log_info "プロファイル分析中..."
-    log_info "設定ファイル: $config_file"
+    log_info "Analyzing profiles..."
+    log_info "Config file: $config_file"
     echo
-    
+
     # 設定ファイルの存在確認
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -178,31 +178,31 @@ analyze_profiles() {
                 fi
             done
         else
-            log_debug "自動生成マーカーの数が不一致: START=$start_count, END=$end_count"
+            log_debug "Auto-generated marker count mismatch: START=$start_count, END=$end_count"
         fi
     fi
-    
+
     # auto_generated_countが空文字列の場合は0に設定
     auto_generated_count=$(safe_number "$auto_generated_count")
-    
+
     # 全プロファイル数の取得
     local total_profiles
     total_profiles=$(safe_grep_count "^\[profile " "$config_file")
-    
+
     # 手動管理プロファイル数（自動生成以外の全て）
     local manual_count
     # 数値の安全な計算
     total_profiles=$(safe_number "$total_profiles")
     auto_generated_count=$(safe_number "$auto_generated_count")
     manual_count=$((total_profiles - auto_generated_count))
-    
+
     # 分析結果の表示
-    log_success "プロファイル分析結果"
+    log_success "Profile analysis results"
     echo
-    echo "📊 プロファイル統計:"
-    echo "  全プロファイル数: $total_profiles"
-    echo "  自動生成プロファイル: $auto_generated_count"
-    echo "  手動管理プロファイル: $manual_count"
+    echo "📊 Profile statistics:"
+    log_kv "Total profiles"     "$total_profiles"
+    log_kv "Auto-generated"     "$auto_generated_count"
+    log_kv "Manual"             "$manual_count"
     
     # 重複プロファイルのチェック
     check_duplicate_profiles "$config_file"
@@ -211,7 +211,7 @@ analyze_profiles() {
     
     # 詳細情報の表示
     if [ "${auto_generated_count:-0}" -gt 0 ]; then
-        echo "🤖 自動生成プロファイル詳細:"
+        echo "🤖 Auto-generated profile details:"
         
         # 複数ブロック対応の詳細表示
         if [ -n "$start_lines" ] && [ -n "$end_lines" ]; then
@@ -230,7 +230,7 @@ analyze_profiles() {
                 
                 local generation_time
                 generation_time=$(echo "$latest_section" | head -1 | sed 's/.*START \(.*\)/\1/')
-                echo "  生成日時: $generation_time"
+                log_kv "Generated at" "$generation_time"
                 
                 # 全ブロックからプロファイル名を取得（最初の5個）
                 local all_profile_names=""
@@ -248,21 +248,21 @@ analyze_profiles() {
                     fi
                 done
                 
-                echo "  プロファイル例（最初の5個）:"
+                echo "  Profile examples (first 5):"
                 echo "$all_profile_names" | head -5 | while IFS= read -r profile; do
                     [ -n "$profile" ] && echo "    - $profile"
                 done
-                
+
                 if [ "${auto_generated_count:-0}" -gt 5 ]; then
-                    echo "    ... 他 $((auto_generated_count - 5)) 個"
+                    echo "    ... and $((auto_generated_count - 5)) more"
                 fi
             fi
         fi
         echo
     fi
-    
+
     if [ "${manual_count:-0}" -gt 0 ]; then
-        echo "✋ 手動管理プロファイル詳細:"
+        echo "✋ Manual profile details:"
 
         # 自動生成プロファイル以外の全プロファイルを取得
         local auto_profiles_file
@@ -285,7 +285,7 @@ analyze_profiles() {
         fi
 
         # 手動管理プロファイルの最初の5個を表示
-        echo "  プロファイル例（最初の5個）:"
+        echo "  Profile examples (first 5):"
 
         # 全プロファイル名を取得
         local all_profiles
@@ -301,7 +301,7 @@ analyze_profiles() {
         done
 
         if [ $manual_count -gt 5 ]; then
-            echo "    ... 他 $((manual_count - 5)) 個"
+            echo "    ... and $((manual_count - 5)) more"
         fi
 
         rm -f "$auto_profiles_file"
@@ -318,18 +318,18 @@ show_auto_generated_details() {
     local config_file="$1"
     local show_all="${2:-false}"
     
-    log_info "自動生成プロファイルの詳細確認中..."
-    log_info "設定ファイル: $config_file"
+    log_info "Inspecting auto-generated profiles..."
+    log_info "Config file: $config_file"
     if [ "$show_all" = "true" ]; then
-        log_info "表示モード: 全件表示（最大300件）"
+        log_info "Display: all (up to 300)"
     else
-        log_info "表示モード: 最初の10件"
+        log_info "Display: first 10"
     fi
     echo
-    
+
     # 設定ファイルの存在確認
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -348,20 +348,20 @@ show_auto_generated_details() {
         local end_count=${#end_array[@]}
 
         if [ "$start_count" -eq "$end_count" ] && [ "$start_count" -gt 0 ]; then
-            log_success "自動生成プロファイルが見つかりました"
+            log_success "Auto-generated profiles found"
             echo
-            
+
             # 最新の生成情報を表示（最後のブロック）
             local latest_start=${start_array[$((start_count-1))]}
             local latest_end=${end_array[$((end_count-1))]}
             local latest_section
             latest_section=$(safe_sed_range "$latest_start" "$latest_end" "$config_file")
-            
+
             local generation_time
             generation_time=$(echo "$latest_section" | head -1 | sed 's/.*START \(.*\)/\1/')
-            echo "📋 自動生成情報:"
-            echo "  最新生成日時: $generation_time"
-            echo "  生成ブロック数: $start_count 個"
+            echo "📋 Auto-generation info:"
+            log_kv "Latest generated at" "$generation_time"
+            log_kv "Block count"         "$start_count"
             
             # 全ブロックのプロファイル数を合計
             local total_profile_count=0
@@ -376,32 +376,32 @@ show_auto_generated_details() {
                 total_profile_count=$((total_profile_count + block_profiles))
             done
             
-            echo "  総プロファイル数: $total_profile_count 個"
+            log_kv "Total profiles" "$total_profile_count"
             local profile_count=$total_profile_count
         else
-            log_debug "自動生成マーカーの数が不一致: START=$start_count, END=$end_count"
+            log_debug "Auto-generated marker count mismatch: START=$start_count, END=$end_count"
             return 1
         fi
         echo
-        
+
         # プロファイル名の表示
         local display_limit=10
         local display_count=$profile_count
-        
+
         if [ "$show_all" = "true" ]; then
             display_limit=300
             if [ "$profile_count" -gt 300 ]; then
                 display_count=300
-                echo "🔍 プロファイル一覧（最初の300個）:"
+                echo "🔍 Profile list (first 300):"
             else
-                echo "🔍 プロファイル一覧（全 $profile_count 個）:"
+                echo "🔍 Profile list (all $profile_count):"
             fi
         else
             if [ "$profile_count" -gt 10 ]; then
                 display_count=10
-                echo "🔍 プロファイル一覧（最初の10個）:"
+                echo "🔍 Profile list (first 10):"
             else
-                echo "🔍 プロファイル一覧（全 $profile_count 個）:"
+                echo "🔍 Profile list (all $profile_count):"
             fi
         fi
         
@@ -427,15 +427,15 @@ show_auto_generated_details() {
         done
         
         if [ "$profile_count" -gt "$display_count" ]; then
-            echo "  ... 他 $((profile_count - display_count)) 個"
+            echo "  ... and $((profile_count - display_count)) more"
         fi
-        
+
         return 0
     else
-        log_info "自動生成プロファイルは見つかりませんでした"
+        log_info "No auto-generated profiles found"
         echo
-        log_info "自動生成プロファイルを作成するには:"
-        echo "  ./generate-sso-profiles.sh を実行してください"
+        log_info "To create auto-generated profiles:"
+        echo "  Run ./generate-sso-profiles.sh"
         return 1
     fi
 }
@@ -445,18 +445,18 @@ show_manual_profiles_details() {
     local config_file="$1"
     local show_all="${2:-false}"
     
-    log_info "手動管理プロファイルの詳細確認中..."
-    log_info "設定ファイル: $config_file"
+    log_info "Inspecting manual profiles..."
+    log_info "Config file: $config_file"
     if [ "$show_all" = "true" ]; then
-        log_info "表示モード: 全件表示（最大300件）"
+        log_info "Display: all (up to 300)"
     else
-        log_info "表示モード: 最初の10件"
+        log_info "Display: first 10"
     fi
     echo
-    
+
     # 設定ファイルの存在確認
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -502,7 +502,7 @@ show_manual_profiles_details() {
     manual_count=$((total_profiles - auto_generated_count))
     
     if [ "${manual_count:-0}" -gt 0 ]; then
-        log_success "手動管理プロファイルが見つかりました"
+        log_success "Manual profiles found"
         echo
         
         local temp_file
@@ -593,27 +593,27 @@ show_manual_profiles_details() {
             echo
             if [ "$show_all" = "true" ]; then
                 if [ $manual_count -gt 300 ]; then
-                    log_info "表示: 300 個（全 $manual_count 個中、上限300件）"
+                    log_info "Displayed: 300 of $manual_count (capped at 300)"
                 else
-                    log_success "手動管理プロファイル数: $manual_count 個（全件表示）"
+                    log_success "Manual profiles: $manual_count (all displayed)"
                 fi
             else
                 if [ $manual_count -gt $displayed_count ]; then
-                    log_info "表示: $displayed_count 個（全 $manual_count 個中）"
+                    log_info "Displayed: $displayed_count of $manual_count"
                 else
-                    log_success "手動管理プロファイル数: $manual_count 個"
+                    log_success "Manual profiles: $manual_count"
                 fi
             fi
         else
-            log_warning "手動管理プロファイルの詳細取得に失敗しました"
+            log_warning "Failed to fetch manual profile details"
         fi
-        
+
         rm -f "$temp_file" "$auto_profiles_file"
         return 0
     else
-        log_info "手動管理プロファイルは見つかりませんでした"
+        log_info "No manual profiles found"
         echo
-        log_info "全てのプロファイルが自動生成されています"
+        log_info "All profiles are auto-generated"
         return 1
     fi
 }
@@ -622,13 +622,13 @@ show_manual_profiles_details() {
 show_duplicate_details() {
     local config_file="$1"
     
-    log_info "重複プロファイルの詳細確認中..."
-    log_info "設定ファイル: $config_file"
+    log_info "Inspecting duplicate profiles..."
+    log_info "Config file: $config_file"
     echo
-    
+
     # 設定ファイルの存在確認
     if [ ! -f "$config_file" ]; then
-        log_warning "設定ファイルが見つかりません: $config_file"
+        log_warning "Config file not found: $config_file"
         return 1
     fi
     
@@ -637,7 +637,7 @@ show_duplicate_details() {
     all_profiles_with_lines=$(grep -n "^\[profile " "$config_file" 2>/dev/null)
     
     if [ -z "$all_profiles_with_lines" ]; then
-        log_info "プロファイルが見つかりませんでした"
+        log_info "No profiles found"
         return 0
     fi
     
@@ -650,39 +650,39 @@ show_duplicate_details() {
     duplicates=$(echo "$all_profiles" | uniq -d)
     
     if [ -n "$duplicates" ]; then
-        log_warning "重複プロファイルが検出されました"
+        log_warning "Duplicate profiles detected"
         echo
-        
+
         local duplicate_count
         duplicate_count=$(echo "$duplicates" | wc -l | tr -d ' ')
-        echo "📋 重複プロファイル詳細 ($duplicate_count 個):"
+        echo "📋 Duplicate profile details ($duplicate_count):"
         echo
-        
+
         echo "$duplicates" | while IFS= read -r profile; do
             if [ -n "$profile" ]; then
-                echo "🔍 プロファイル名: $profile"
-                
+                echo "🔍 Profile: $profile"
+
                 # 該当するプロファイルの行番号と詳細を表示
                 local profile_lines
                 profile_lines=$(echo "$all_profiles_with_lines" | grep "\[profile $profile\]")
-                
+
                 local count=1
                 echo "$profile_lines" | while IFS= read -r line; do
                     local line_num
                     line_num=$(echo "$line" | cut -d: -f1)
-                    echo "  定義 $count: 行 $line_num"
-                    
+                    echo "  Definition $count: line $line_num"
+
                     # プロファイルの設定内容を表示（次のプロファイルまで）
                     local next_profile_line
                     next_profile_line=$(tail -n +$((line_num + 1)) "$config_file" | grep -n "^\[" | head -1 | cut -d: -f1)
-                    
+
                     if [ -n "$next_profile_line" ]; then
                         local end_line=$((line_num + next_profile_line - 1))
                         sed -n "${line_num},${end_line}p" "$config_file" | head -10 | sed 's/^/    /'
                     else
                         tail -n +"$line_num" "$config_file" | head -10 | sed 's/^/    /'
                     fi
-                    
+
                     count=$((count + 1))
                     echo
                 done
@@ -690,46 +690,46 @@ show_duplicate_details() {
                 echo
             fi
         done
-        
+
         echo
-        log_info "重複解消の推奨事項:"
-        echo "  1. 設定ファイルを手動で編集して重複を削除"
-        echo "  2. 自動生成プロファイルの場合は再生成を検討"
-        echo "  3. バックアップを取ってから編集作業を実施"
-        
+        log_info "Recommended steps to resolve duplicates:"
+        echo "  1. Edit the config file manually to remove duplicates"
+        echo "  2. For auto-generated profiles, consider regenerating"
+        echo "  3. Always back up the config file before editing"
+
         return 1
     else
-        log_success "重複プロファイルは見つかりませんでした"
+        log_success "No duplicate profiles found"
         echo
         local total_count
         total_count=$(echo "$all_profiles" | wc -l | tr -d ' ')
-        echo "✅ 全 $total_count 個のプロファイルは一意です"
+        echo "✅ All $total_count profiles are unique"
         return 0
     fi
 }
 
 # 使用方法を表示
 show_usage() {
-    echo "使用方法: $0 [COMMAND] [OPTIONS]"
+    echo "Usage: $0 [COMMAND] [OPTIONS]"
     echo
-    echo "コマンド:"
-    echo "  analyze               全プロファイルの分析（デフォルト）"
-    echo "  auto [--all]          自動生成プロファイルの詳細表示"
-    echo "  manual [--all]        手動管理プロファイルの詳細表示"
-    echo "  duplicates            重複プロファイルの詳細チェック"
-    echo "  -h, --help            このヘルプを表示"
+    echo "Commands:"
+    echo "  analyze               Analyze all profiles (default)"
+    echo "  auto [--all]          Show auto-generated profile details"
+    echo "  manual [--all]        Show manual profile details"
+    echo "  duplicates            Inspect duplicate profiles"
+    echo "  -h, --help            Show this help"
     echo
-    echo "オプション:"
-    echo "  --all                 全件表示（最大300件まで、デフォルトは10件）"
+    echo "Options:"
+    echo "  --all                 Show all entries (up to 300; default 10)"
     echo
-    echo "例:"
-    echo "  $0                    # 全プロファイルの分析を実行"
-    echo "  $0 analyze            # 全プロファイルの分析を実行"
-    echo "  $0 auto               # 自動生成プロファイルの詳細を表示（最初の10件）"
-    echo "  $0 auto --all         # 自動生成プロファイルの詳細を全件表示"
-    echo "  $0 manual             # 手動管理プロファイルの詳細を表示（最初の10件）"
-    echo "  $0 manual --all       # 手動管理プロファイルの詳細を全件表示"
-    echo "  $0 duplicates         # 重複プロファイルの詳細チェック"
+    echo "Examples:"
+    echo "  $0                    # Analyze all profiles"
+    echo "  $0 analyze            # Analyze all profiles"
+    echo "  $0 auto               # Show auto-generated profile details (first 10)"
+    echo "  $0 auto --all         # Show all auto-generated profile details"
+    echo "  $0 manual             # Show manual profile details (first 10)"
+    echo "  $0 manual --all       # Show all manual profile details"
+    echo "  $0 duplicates         # Inspect duplicate profiles"
 }
 
 # メイン実行
@@ -740,7 +740,7 @@ main() {
         exit 0
     fi
     
-    echo "📊 AWS SSO プロファイル分析"
+    echo "📊 AWS SSO Profile Analysis"
     echo "=========================="
     echo
     
@@ -773,18 +773,18 @@ main() {
             result=$?
             ;;
         *)
-            log_error "不明なコマンド: $1"
+            log_error "Unknown command: $1"
             echo
             show_usage
             exit 1
             ;;
     esac
-    
+
     echo
     if [ $result -eq 0 ]; then
-        log_success "プロファイル分析が完了しました"
+        log_success "Profile analysis complete"
     else
-        log_error "プロファイル分析でエラーが発生しました"
+        log_error "Errors occurred during profile analysis"
     fi
     
     exit $result

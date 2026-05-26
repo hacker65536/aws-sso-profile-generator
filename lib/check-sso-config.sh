@@ -19,7 +19,7 @@ show_all_sso_sessions() {
         return 0
     fi
     
-    log_info "利用可能なSSO Sessions:"
+    log_info "Available SSO Sessions:"
     
     local session_count=0
     local current_session=""
@@ -74,8 +74,8 @@ show_all_sso_sessions() {
             {
                 if (NF >= 3 && $1 != "") {
                     printf "  %d. %s\n", NR, $1
-                    printf "     Region: %s\n", ($2 != "" ? $2 : "未設定")
-                    printf "     Start URL: %s\n", ($3 != "" ? $3 : "未設定")
+                    printf "     Region: %s\n", ($2 != "" ? $2 : "unset")
+                    printf "     Start URL: %s\n", ($3 != "" ? $3 : "unset")
                     printf "\n"
                 }
             }
@@ -87,15 +87,15 @@ show_all_sso_sessions() {
                 if (NF >= 3 && $1 != "") {
                     if (NR <= 5) {
                         printf "  %d. %s\n", NR, $1
-                        printf "     Region: %s\n", ($2 != "" ? $2 : "未設定")
-                        printf "     Start URL: %s\n", ($3 != "" ? $3 : "未設定")
+                        printf "     Region: %s\n", ($2 != "" ? $2 : "unset")
+                        printf "     Start URL: %s\n", ($3 != "" ? $3 : "unset")
                         printf "\n"
                     }
                 }
             }
             END {
                 if (NR > 5) {
-                    printf "  ... 他 %d 個のセッション（詳細は省略）\n", (NR - 5)
+                    printf "  ... and %d more sessions (details omitted)\n", (NR - 5)
                     printf "\n"
                 }
             }
@@ -117,15 +117,15 @@ check_sso_config() {
     local config_file
     config_file=$(get_config_file)
 
-    log_info "AWS SSO設定の確認中..."
-    log_info "設定ファイル: $config_file"
+    log_info "Checking AWS SSO configuration..."
+    log_info "Config file: $config_file"
     echo
 
     # 設定ファイルの存在確認
     if [ ! -f "$config_file" ]; then
-        log_error "AWS設定ファイルが見つかりません: $config_file"
-        log_info "設定ファイルを作成してください"
-        log_info "設定例:"
+        log_error "AWS config file not found: $config_file"
+        log_info "Please create a config file"
+        log_info "Example:"
         echo "  [sso-session session-name]"
         echo "  sso_region = ap-northeast-1"
         echo "  sso_start_url = https://your-domain.awsapps.com/start/"
@@ -141,8 +141,8 @@ check_sso_config() {
     session_count=${session_count:-0}
 
     if [ "$session_count" -eq 0 ]; then
-        log_error "SSO Session設定が見つかりません"
-        log_info "設定例:"
+        log_error "No SSO Session configuration found"
+        log_info "Example:"
         echo "  [sso-session session-name]"
         echo "  sso_region = ap-northeast-1"
         echo "  sso_start_url = https://your-domain.awsapps.com/start/"
@@ -153,18 +153,18 @@ check_sso_config() {
     # 共通のSSO設定取得関数を使用（最初のセッションを使用）
     if get_sso_config "$config_file"; then
         if [ "$session_count" -gt 1 ]; then
-            log_info "複数のSSO Sessionが設定されています（合計: $session_count 個）"
-            log_info "デフォルトで使用するセッション: $SSO_SESSION_NAME"
+            log_info "Multiple SSO sessions configured (total: $session_count)"
+            log_info "Default session to use: $SSO_SESSION_NAME"
         else
-            log_success "SSO Session設定が見つかりました"
+            log_success "SSO Session configuration found"
         fi
-        
-        echo "📋 使用中のセッション詳細:"
+
+        echo "📋 Active session details:"
         log_kv "Session"        "$SSO_SESSION_NAME"
         log_kv "SSO Region"     "$SSO_REGION"
         log_kv "SSO Start URL"  "$SSO_START_URL"
 
-        log_success "SSO設定は正常です"
+        log_success "SSO configuration is OK"
         
         # SSO セッション状態もチェック
         echo
@@ -173,25 +173,25 @@ check_sso_config() {
         return 0
     else
 
-        log_error "SSO Session設定の読み込みに失敗しました"
+        log_error "Failed to load SSO Session configuration"
         return 1
     fi
 }
 
 # 使用方法を表示
 show_usage() {
-    echo "使用方法: $0 [SESSION_NAME]"
+    echo "Usage: $0 [SESSION_NAME]"
     echo
-    echo "引数:"
-    echo "  SESSION_NAME          確認する特定のSSO Session名（省略時は全セッション表示）"
+    echo "Arguments:"
+    echo "  SESSION_NAME          Specific SSO session name to check (default: show all)"
     echo
-    echo "オプション:"
-    echo "  -h, --help            このヘルプを表示"
+    echo "Options:"
+    echo "  -h, --help            Show this help"
     echo
-    echo "例:"
-    echo "  $0                    # 全てのセッションを表示し、最初のものを使用"
-    echo "  $0 my-session         # 'my-session' セッションを確認"
-    echo "  $0 --help             # ヘルプを表示"
+    echo "Examples:"
+    echo "  $0                    # Show all sessions and use the first"
+    echo "  $0 my-session         # Check the 'my-session' session"
+    echo "  $0 --help             # Show help"
 }
 
 # 特定のセッションをチェックする関数
@@ -200,31 +200,31 @@ check_specific_sso_session() {
     local config_file
     config_file=$(get_config_file)
 
-    local message="AWS SSO設定の確認中（セッション: ${session_name}）..."
+    local message="Checking AWS SSO configuration (session: ${session_name})..."
     log_info "$message"
-    log_info "設定ファイル: $config_file"
+    log_info "Config file: $config_file"
     echo
 
     # 指定されたセッションの設定を取得
     if get_sso_config "$config_file" "$session_name"; then
-        log_success "指定されたSSO Session設定が見つかりました"
-        
-        echo "📋 セッション詳細:"
+        log_success "Specified SSO Session configuration found"
+
+        echo "📋 Session details:"
         log_kv "Session"        "$SSO_SESSION_NAME"
         log_kv "SSO Region"     "$SSO_REGION"
         log_kv "SSO Start URL"  "$SSO_START_URL"
-        
-        log_success "SSO設定は正常です"
-        
+
+        log_success "SSO configuration is OK"
+
         # SSO セッション状態もチェック
         echo
         check_sso_session_status "$SSO_START_URL" "$SSO_SESSION_NAME"
-        
+
         return 0
     else
-        log_error "指定されたSSO Session '$session_name' が見つかりません"
+        log_error "Specified SSO Session '$session_name' not found"
         echo
-        log_info "利用可能なセッション一覧:"
+        log_info "Available sessions:"
         show_all_sso_sessions "$config_file"
         return 1
     fi
@@ -238,7 +238,7 @@ main() {
         exit 0
     fi
 
-    echo "🔍 AWS SSO 設定確認"
+    echo "🔍 AWS SSO Configuration Check"
     echo "==================="
     echo
 
@@ -255,9 +255,9 @@ main() {
     
     echo
     if [ $result -eq 0 ]; then
-        log_success "AWS SSO設定の確認が完了しました"
+        log_success "AWS SSO configuration check complete"
     else
-        log_error "AWS SSO設定に問題があります"
+        log_error "AWS SSO configuration has issues"
     fi
     
     exit $result

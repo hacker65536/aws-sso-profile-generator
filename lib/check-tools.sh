@@ -50,40 +50,40 @@ show_install_instructions() {
     case "$cmd" in
         "aws")
             echo
-            log_info "AWS CLI v2 インストール方法:"
+            log_info "AWS CLI v2 installation:"
             echo "  macOS:"
             echo "    curl \"https://awscli.amazonaws.com/AWSCLIV2.pkg\" -o \"AWSCLIV2.pkg\""
             echo "    sudo installer -pkg AWSCLIV2.pkg -target /"
             echo
-            echo "  または Homebrew:"
+            echo "  or Homebrew:"
             echo "    brew install awscli"
             ;;
         "jq")
             echo
-            log_info "jq インストール方法:"
+            log_info "jq installation:"
             echo "  macOS (Homebrew):"
             echo "    brew install jq"
             echo
             echo "  macOS (MacPorts):"
             echo "    sudo port install jq"
             echo
-            echo "  直接ダウンロード:"
+            echo "  Direct download:"
             echo "    https://github.com/jqlang/jq/releases"
             ;;
         "bash")
             echo
-            log_info "Bash アップグレード方法:"
+            log_info "Bash upgrade:"
             echo "  macOS (Homebrew):"
             echo "    brew install bash"
             echo
-            echo "  注意: macOS標準のbashは古いバージョンです"
-            echo "  新しいbashを使用するには /etc/shells に追加が必要です"
+            echo "  Note: macOS ships an old bash by default"
+            echo "  Add the new bash to /etc/shells to use it as login shell"
             ;;
         "column")
             echo
-            log_info "column インストール方法:"
-            echo "  macOS: 通常は標準でインストールされています"
-            echo "  Linux (util-linux パッケージに含まれる):"
+            log_info "column installation:"
+            echo "  macOS: typically pre-installed"
+            echo "  Linux (part of util-linux):"
             echo "    Ubuntu/Debian: sudo apt-get install util-linux"
             echo "    CentOS/RHEL: sudo yum install util-linux"
             ;;
@@ -95,48 +95,48 @@ check_tool() {
     local tool_name="$1"
     local display_name="$2"
     
-    log_info "Step: ${display_name} の確認中..."
-    
+    log_info "Step: checking ${display_name}..."
+
     if check_command_exists "$tool_name"; then
-        log_success "${display_name} が見つかりました"
-        
+        log_success "${display_name} found"
+
         local version
         if version=$(get_version "$tool_name") && [ -n "$version" ]; then
-            log_success "バージョン: $version"
-            
+            log_success "Version: $version"
+
             # AWS CLI の場合、v2かどうかもチェック
             if [ "$tool_name" = "aws" ]; then
                 if [[ $version == 2.* ]]; then
-                    log_success "AWS CLI v2 が正しくインストールされています"
+                    log_success "AWS CLI v2 is installed correctly"
                 else
-                    log_warning "AWS CLI v1 が検出されました (v2 推奨)"
-                    log_info "現在のバージョン: $version"
+                    log_warning "AWS CLI v1 detected (v2 recommended)"
+                    log_info "Current version: $version"
                 fi
             fi
-            
+
             # Bash の場合、バージョンをチェック
             if [ "$tool_name" = "bash" ]; then
                 local major_version
                 major_version=$(echo "$version" | cut -d'.' -f1)
                 if [ "$major_version" -ge 4 ]; then
-                    log_success "Bash v4以上が利用可能です"
+                    log_success "Bash v4 or newer is available"
                 else
-                    log_warning "Bash v3が検出されました (v4以上推奨)"
-                    log_info "macOS標準のbashは古いバージョンです"
+                    log_warning "Bash v3 detected (v4+ recommended)"
+                    log_info "macOS ships an old bash by default"
                 fi
             fi
-            
+
             # column の場合、特別な表示
             if [ "$tool_name" = "column" ]; then
-                log_success "column コマンドが利用可能です（表示整形に使用）"
+                log_success "column command is available (used for output formatting)"
             fi
         else
-            log_warning "バージョン情報の取得に失敗しました"
+            log_warning "Failed to get version info"
         fi
-        
+
         return 0
     else
-        log_error "${display_name} が見つかりません"
+        log_error "${display_name} not found"
         show_install_instructions "$tool_name"
         return 1
     fi
@@ -151,68 +151,68 @@ show_summary() {
     
     echo
     echo "=================================="
-    echo "📋 ツールチェック結果サマリー"
+    echo "📋 Tool check summary"
     echo "=================================="
-    
+
     if [ "$aws_status" -eq 0 ]; then
-        log_success "AWS CLI: インストール済み"
+        log_success "AWS CLI: installed"
     else
-        log_error "AWS CLI: 未インストール"
+        log_error "AWS CLI: not installed"
     fi
-    
+
     if [ "$jq_status" -eq 0 ]; then
-        log_success "jq: インストール済み"
+        log_success "jq: installed"
     else
-        log_error "jq: 未インストール"
+        log_error "jq: not installed"
     fi
-    
+
     if [ "$bash_status" -eq 0 ]; then
-        log_success "Bash: 利用可能"
+        log_success "Bash: available"
     else
-        log_error "Bash: 問題あり"
+        log_error "Bash: has issues"
     fi
-    
+
     if [ "$column_status" -eq 0 ]; then
-        log_success "column: 利用可能"
+        log_success "column: available"
     else
-        log_error "column: 未インストール"
+        log_error "column: not installed"
     fi
-    
+
     echo
-    
+
     if [ "$aws_status" -eq 0 ] && [ "$jq_status" -eq 0 ] && [ "$bash_status" -eq 0 ] && [ "$column_status" -eq 0 ]; then
-        log_success "すべてのツールが正常に利用可能です！"
+        log_success "All required tools are available!"
         return 0
     else
-        log_warning "一部のツールに問題があります"
-        log_info "上記の情報を参考にしてください"
+        log_warning "Some tools have issues"
+        log_info "Refer to the install instructions above"
         return 1
     fi
 }
 
 # メイン実行部分
 main() {
-    echo "🔍 必要ツールの存在・バージョン確認"
+    echo "🔍 Checking required tools (existence + version)"
     echo "=================================="
     echo
-    
+
     # Bash チェック
     check_tool "bash" "Bash"
     bash_result=$?
     echo
-    
+
     # AWS CLI チェック
     check_tool "aws" "AWS CLI"
     aws_result=$?
     echo
-    
+
     # jq チェック
     check_tool "jq" "jq (JSON processor)"
     jq_result=$?
     echo
-    
+
     # column チェック
-    check_tool "column" "column (表示整形)"
+    check_tool "column" "column (output formatting)"
     column_result=$?
     echo
     
