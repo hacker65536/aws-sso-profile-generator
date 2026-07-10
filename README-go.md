@@ -2,6 +2,8 @@
 
 `~/.aws/config` の AWS SSO プロファイルを、宣言的な `.aws-sso-profiles.yaml` を single source of truth として **plan / apply**（Terraform 流・冪等・構造化出力・exit code）で管理する Go 製 CLI です。既存の Bash 版（`generate-sso-profiles.sh` ほか）の後継で、当面は並存します。
 
+> 📖 詳細な**要件**（目的・スコープ・不変条件・region 2 概念・ユーザーフロー）は [docs/requirements.md](docs/requirements.md)、**アーキテクチャ / 実装**（Phase A–E・パッケージ責務・§0 冪等性・テスト戦略）は [docs/implementation.md](docs/implementation.md) を参照してください。
+
 ## なぜ Go 版か
 
 - **宣言的**: 対話 5 問＋フィルタを `config.yaml` に圧縮。判断がファイルに残る。

@@ -2,7 +2,7 @@
 
 AWS Single Sign-On (SSO) プロファイルの自動生成と管理を行う Bash スクリプト群です。
 
-> **📦 Go 版 (desired-state CLI) を開発中** — 宣言的 `config.yaml` + `plan`/`apply`（冪等・構造化出力・exit code）の後継実装があります。使い方は **[README-go.md](README-go.md)** を参照。現在は Bash 版と並存しています（Bash 版のドキュメントは以下）。
+> **📦 Go 版 (desired-state CLI) を開発中** — 宣言的 `config.yaml` + `plan`/`apply`（冪等・構造化出力・exit code）の後継実装があります。使い方は **[README-go.md](README-go.md)**、要件は **[docs/requirements.md](docs/requirements.md)**、アーキテクチャは **[docs/implementation.md](docs/implementation.md)** を参照。現在は Bash 版と並存しています（Bash 版のドキュメントは以下）。
 
 ## 概要
 
