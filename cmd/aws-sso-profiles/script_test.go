@@ -8,9 +8,9 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Exit(testscript.RunMain(m, map[string]func() int{
-		"aws-sso-profiles": run,
-	}))
+	testscript.Main(m, map[string]func(){
+		"aws-sso-profiles": func() { os.Exit(run()) },
+	})
 }
 
 func TestScripts(t *testing.T) {

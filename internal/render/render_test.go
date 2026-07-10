@@ -46,7 +46,9 @@ func TestBodyGolden(t *testing.T) {
 }
 
 func TestBodyDeterministic(t *testing.T) {
-	if Body(sample(), testProv) != Body(sample(), testProv) {
+	first := Body(sample(), testProv)
+	second := Body(sample(), testProv)
+	if first != second {
 		t.Error("Body must be deterministic")
 	}
 }

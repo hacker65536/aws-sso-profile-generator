@@ -23,7 +23,7 @@ func (f *fakeSSO) ListAccounts(_ context.Context, in *sso.ListAccountsInput, _ .
 	}
 	start := 0
 	if in.NextToken != nil {
-		fmt.Sscanf(*in.NextToken, "%d", &start)
+		_, _ = fmt.Sscanf(*in.NextToken, "%d", &start)
 	}
 	end := start + 2
 	var next *string

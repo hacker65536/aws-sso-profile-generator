@@ -1,0 +1,11 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # CLI の stdout/stderr 書き込み系はエラーを握っても対処のしようがないため除外。
+      # errcheck 自身が fmt.Print* を既定除外しているのと同じ思想 (Fprint* まで広げる)。
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
