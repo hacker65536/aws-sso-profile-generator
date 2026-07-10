@@ -74,6 +74,8 @@ aws-sso-profiles apply         # 冪等。管理ブロックのみ書換
 
 共通フラグ: `-c/--config`（既定 `./.aws-sso-profiles.yaml`）、`-o/--output human|json`、`-p/--parallel N`（既定 8, adaptive retry 併用）、`--login`（失効時に `aws sso login` を代行）、`--cache`（opt-in ディスクキャッシュ）、`--refresh-cache`。
 
+config パスは **`-c/--config` 明示指定 > 環境変数 `AWS_SSO_PROFILES_CONFIG` > 既定 `./.aws-sso-profiles.yaml`** の順で解決されます。別名 config を常用するなら `export AWS_SSO_PROFILES_CONFIG=~/.aws-sso-poc-profiles.yaml` としておけば `-c` を毎回付けずに済みます（`~` は展開されます）。
+
 ## config スキーマ（`.aws-sso-profiles.yaml`）
 
 ```yaml

@@ -1,0 +1,35 @@
+# AWS_SSO_PROFILES_CONFIG resolves the config path when -c is absent,
+# -c overrides it, and ~ is expanded. Precedence: -c > env > default.
+env AWS_CONFIG_FILE=$WORK/aws_config
+
+# env points at a valid config, no -c -> that config is read and validates OK
+env AWS_SSO_PROFILES_CONFIG=$WORK/env.yaml
+exec aws-sso-profiles validate
+stdout 'OK: config valid'
+
+# no env, no -c -> falls back to the default file name in the error
+env AWS_SSO_PROFILES_CONFIG=
+! exec aws-sso-profiles validate
+stderr 'read config .aws-sso-profiles.yaml'
+
+# env pointing at a missing file -> error names THAT path (proves env is honored)
+env AWS_SSO_PROFILES_CONFIG=$WORK/missing.yaml
+! exec aws-sso-profiles validate
+stderr 'read config .*missing.yaml'
+
+# explicit -c wins over env (env still points at the missing file)
+exec aws-sso-profiles validate -c env.yaml
+stdout 'OK: config valid'
+
+-- env.yaml --
+sso:
+  session: main
+defaults:
+  prefix: awssso
+  template: "{prefix}-{account_id}-{role}"
+
+-- aws_config --
+[sso-session main]
+sso_start_url = https://x/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access

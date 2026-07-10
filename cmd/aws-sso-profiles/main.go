@@ -51,7 +51,7 @@ func rootCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
-	root.PersistentFlags().StringP("config", "c", app.DefaultConfigPath, "path to .aws-sso-profiles.yaml")
+	root.PersistentFlags().StringP("config", "c", app.DefaultConfigPath, "path to .aws-sso-profiles.yaml (env: AWS_SSO_PROFILES_CONFIG)")
 	root.PersistentFlags().StringP("output", "o", "human", "output format: human|json")
 	root.AddCommand(initCmd(), listCmd(), planCmd(), applyCmd(), validateCmd(), schemaCmd(), cleanupCmd(), checkCmd(), versionCmd())
 	return root
@@ -60,8 +60,21 @@ func rootCmd() *cobra.Command {
 // ---- helpers ----
 
 func loadApp(cmd *cobra.Command) (*app.App, error) {
-	cfgPath, _ := cmd.Flags().GetString("config")
-	return app.Load(cfgPath, version)
+	return app.Load(configPath(cmd), version)
+}
+
+// configPath resolves the config file path with precedence:
+// explicit --config > $AWS_SSO_PROFILES_CONFIG > flag default.
+func configPath(cmd *cobra.Command) string {
+	if cmd.Flags().Changed("config") {
+		v, _ := cmd.Flags().GetString("config")
+		return v
+	}
+	if env := os.Getenv(app.ConfigPathEnv); env != "" {
+		return env
+	}
+	v, _ := cmd.Flags().GetString("config")
+	return v
 }
 
 func invOptions(cmd *cobra.Command) app.InvOptions {
@@ -88,7 +101,7 @@ func initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "Interactively create .aws-sso-profiles.yaml and the [sso-session] block",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfgPath, _ := cmd.Flags().GetString("config")
+			cfgPath := configPath(cmd)
 			// Guard: never clobber an existing config without --force.
 			if !force {
 				if _, err := os.Stat(cfgPath); err == nil {
