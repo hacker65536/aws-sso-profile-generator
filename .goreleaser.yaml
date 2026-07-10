@@ -19,7 +19,7 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X main.version={{ .Version }}
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }} -X main.date={{ .Date }}
 
 archives:
   - formats: [tar.gz]
@@ -32,12 +32,27 @@ changelog:
   use: github
   sort: asc
 
-# Homebrew tap — set the tap repo owner/name and a token secret before release.
-brews:
+# Homebrew tap (cask) — set the tap repo owner/name and a token secret before release.
+# `brews` (formula) was deprecated in goreleaser v2.16; casks are the current path.
+homebrew_casks:
   - name: aws-sso-profiles
     repository:
       owner: hacker65536
       name: homebrew-tap
+      # PAT with `repo` scope on the tap; the default GITHUB_TOKEN cannot push
+      # to a different repository. Provided via the release workflow env.
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaser-bot
+      email: goreleaser-bot@users.noreply.github.com
     homepage: "https://github.com/hacker65536/aws-sso-profile-generator"
     description: "Desired-state generator for AWS SSO profiles"
     skip_upload: auto
+    # The binary is not signed/notarized; strip the quarantine bit on macOS so
+    # Gatekeeper does not flag it as "damaged" on first run.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/aws-sso-profiles"]
+          end
