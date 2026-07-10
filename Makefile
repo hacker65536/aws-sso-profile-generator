@@ -40,7 +40,7 @@ completions: build ## Generate shell completions into ./completions-go
 	./$(BINARY) completion zsh  > completions-go/$(BINARY).zsh
 	./$(BINARY) completion fish > completions-go/$(BINARY).fish
 
-demo: ## Record the terminal demo GIF into demo/aws-sso-profiles.gif (needs: vhs, ffmpeg)
+demo: ## Record the terminal demo GIFs into demo/*.gif (needs: vhs, ffmpeg, fzf, aws)
 	bash demo/record.sh
 
 clean:

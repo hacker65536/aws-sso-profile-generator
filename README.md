@@ -8,13 +8,13 @@
 
 > ℹ️ かつて存在した Bash 版（`generate-sso-profiles.sh` ほか）は本 Go 実装に全面移行し、**撤去済み**です（履歴は git と [CHANGELOG.md](CHANGELOG.md) を参照）。
 
-> 📖 詳細な**要件**（目的・スコープ・不変条件・region 2 概念・ユーザーフロー）は [docs/requirements.md](docs/requirements.md)、**アーキテクチャ / 実装**（Phase A–E・パッケージ責務・§0 冪等性・テスト戦略）は [docs/implementation.md](docs/implementation.md) を参照してください。
+> 📖 詳細な**要件**（目的・スコープ・不変条件・region 2 概念・ユーザーフロー）は [docs/requirements.md](docs/requirements.md)、**アーキテクチャ / 実装**（Phase A–E・パッケージ責務・§0 冪等性・テスト戦略）は [docs/implementation.md](docs/implementation.md)、**導入シナリオ別の手順**（既存 config あり・手書き SSO からの移行・マルチ org 等）は [docs/setup-guide.md](docs/setup-guide.md) を参照してください。
 
 ## 特徴
 
 - **宣言的**: 対話 5 問＋フィルタを `config.yaml` に圧縮。判断がファイルに残る。
 - **desired-state**: `plan` で差分（added / removed / **changed** / unchanged）と **drift**（手編集）を可視化、`apply` は**冪等**（同一 config + 同一インベントリなら no-op・バイト不変）。
-- **AI/自動化フレンドリ**: `--output json`、Terraform 流 exit code（`0`=差分なし / `2`=差分あり or drift / `1`=エラー）、埋め込み JSON Schema（`schema` コマンド）。
+- **AI/自動化フレンドリ**: `--output json`、Terraform 流 exit code（`0`=差分なし / `2`=差分あり or drift / `1`=エラー）、埋め込み JSON Schema（`schema` コマンド）。生成 profile を AI エージェントに使わせる [CLAUDE.md テンプレート](docs/setup-guide.md#生成した-profile-を-ai-エージェントから使うclaudemd-への組み込み)も用意。
 - **依存レス**: AWS SDK for Go v2 直呼び（`aws` CLI / jq 不要）、単一バイナリ。
 
 ## 前提
@@ -57,6 +57,8 @@ aws sso login --sso-session my-sso
 aws-sso-profiles plan          # exit 2 なら差分あり
 aws-sso-profiles apply         # 冪等。管理ブロックのみ書換
 ```
+
+既存の `~/.aws/config` がある・手書きで SSO を運用していた・複数 org を扱うなど、状況別の導入手順は[導入シナリオ別ガイド](docs/setup-guide.md)を参照してください。
 
 ## サブコマンド
 
@@ -118,6 +120,8 @@ aws-sso-profiles apply -c work.yaml   # prefix: awssso（業務用）
 aws-sso-profiles apply -c poc.yaml    # prefix: awspoc（検証用）
 ```
 
+`AWS_SSO_PROFILES_CONFIG` と `AWS_CONFIG_FILE` を direnv / shell 関数でペア切替する具体パターンは[導入シナリオ別ガイドのシナリオ 5](docs/setup-guide.md#シナリオ-5-複数-org-で-config-も生成先も分ける) を参照してください。
+
 ## 冪等性と provenance
 
 - apply の no-op 判定は **plan ベース**（desired の profile 集合が一致すれば書き込まない）。バージョンや provenance の差では書き換わりません。
@@ -136,6 +140,8 @@ aws_profile() {
     [ -n "$p" ] && export AWS_PROFILE="$p" && echo "AWS_PROFILE=$p"
 }
 ```
+
+![aws_profile (fzf) demo](demo/aws-profile-fzf.gif)
 
 ## 開発
 
