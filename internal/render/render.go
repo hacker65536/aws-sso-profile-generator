@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
+	"github.com/hacker65536/aws-sso-profiles/internal/plan"
 )
 
 // Provenance is the audit metadata stamped into the managed block's first line.

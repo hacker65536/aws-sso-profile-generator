@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/naming"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/selector"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssoapi"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/naming"
+	"github.com/hacker65536/aws-sso-profiles/internal/selector"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssoapi"
 )
 
 // IdentityKeys are tool-owned and must never appear in user settings.

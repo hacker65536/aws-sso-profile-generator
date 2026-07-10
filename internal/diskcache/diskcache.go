@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssoapi"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssoapi"
 )
 
 // Cache is a directory-backed inventory cache.

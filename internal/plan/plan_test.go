@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/naming"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/selector"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssoapi"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/naming"
+	"github.com/hacker65536/aws-sso-profiles/internal/selector"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssoapi"
 )
 
 func params() Params {

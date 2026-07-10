@@ -1,4 +1,4 @@
-module github.com/hacker65536/aws-sso-profile-generator
+module github.com/hacker65536/aws-sso-profiles
 
 go 1.26.5
 

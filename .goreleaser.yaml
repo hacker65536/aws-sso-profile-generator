@@ -45,7 +45,7 @@ homebrew_casks:
     commit_author:
       name: goreleaser-bot
       email: goreleaser-bot@users.noreply.github.com
-    homepage: "https://github.com/hacker65536/aws-sso-profile-generator"
+    homepage: "https://github.com/hacker65536/aws-sso-profiles"
     description: "Desired-state generator for AWS SSO profiles"
     skip_upload: auto
     # The binary is not signed/notarized; strip the quarantine bit on macOS so
