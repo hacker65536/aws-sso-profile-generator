@@ -4,6 +4,18 @@
 
 > **v2.0.0 以降は Go 実装（`aws-sso-profiles`）が本体です。** v1.x は Bash 版の履歴で、Bash 版は撤去済みです（コードは git 履歴を参照）。
 
+## [v2.2.0] - セキュリティ・ハードニング
+
+### Security
+- **INI インジェクション耐性（多層防御）。** SSO API 由来の `role` / `account_id`、および policy YAML の `settings` 値を `~/.aws/config` へ書き込む前に fail-closed 検証する。`account_id` は数字のみ、`role` は AWS 許容文字集合、生成後の profile 名は改行・角括弧を排除。`settings` の key/value も改行・角括弧を拒否。異常値による `credential_process` 等の注入（プロファイル使用時のコード実行）を防止。正常な AWS データは全て通過し後方互換。
+- **`~/.aws/config` の権限締結。** 生成・バックアップ時に group/other ビットを落とし owner-only（`0600`）にする。既存が `0644` の場合も `0600` に締まる。
+- **`init` が生成する `.aws-sso-profiles.yaml` を `0600` に**（従来 `0644`）。org 識別子を含むため owner-only に。
+- disk cache の一時ファイルを固定名からランダム名（`os.CreateTemp`）化し、symlink / 事前作成レースを回避。
+- 脆弱性開示ポリシー [SECURITY.md](SECURITY.md) と Dependabot（gomod / github-actions の週次更新）を追加。
+
+### Changed
+- **`--cache` の既定保存先を CWD 相対 `./.aws-sso-cache` から `os.UserCacheDir()/aws-sso-profiles`（Linux `~/.cache/aws-sso-profiles/`, macOS `~/Library/Caches/aws-sso-profiles/`）に変更。** 実アカウント ID / 名を含むスナップショットの散在・誤コミットを防止。`CACHE_DIR` を明示指定した場合は従来通り尊重。
+
 ## [v2.1.0] - config パスの環境変数指定と導入ガイド
 
 ### Added
