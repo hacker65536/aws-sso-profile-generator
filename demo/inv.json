@@ -1,0 +1,5 @@
+[
+ {"account":{"account_id":"100000000001","account_name":"prod"},"roles":["AWSReadOnlyAccess","AWSAdministratorAccess"]},
+ {"account":{"account_id":"100000000002","account_name":"staging"},"roles":["AWSReadOnlyAccess"]},
+ {"account":{"account_id":"100000000003","account_name":"sandbox"},"roles":["AWSReadOnlyAccess"]}
+]

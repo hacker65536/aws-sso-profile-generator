@@ -1,0 +1,9 @@
+sso:
+  session: my-sso
+  start_url: https://my.awsapps.com/start
+  region: us-east-1
+defaults:
+  prefix: awssso
+  settings:
+    region: us-east-1
+    output: json
