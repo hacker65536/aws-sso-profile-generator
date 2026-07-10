@@ -1,0 +1,17 @@
+# managed by aws-sso-profiles v-test — do not edit; config-sha256=deadbeef
+
+[profile awssso-a-1:AWSAdministratorAccess]
+sso_session = my-sso
+sso_account_id = 1
+sso_role_name = AWSAdministratorAccess
+cli_pager =
+output = json
+region = ap-northeast-1
+
+[profile awssso-b-2:AWSReadOnlyAccess]
+sso_session = my-sso
+sso_account_id = 2
+sso_role_name = AWSReadOnlyAccess
+cli_pager =
+output = json
+region = us-east-1

@@ -1,0 +1,43 @@
+version: 2
+
+project_name: aws-sso-profiles
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: aws-sso-profiles
+    main: ./cmd/aws-sso-profiles
+    binary: aws-sso-profiles
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  use: github
+  sort: asc
+
+# Homebrew tap — set the tap repo owner/name and a token secret before release.
+brews:
+  - name: aws-sso-profiles
+    repository:
+      owner: hacker65536
+      name: homebrew-tap
+    homepage: "https://github.com/hacker65536/aws-sso-profile-generator"
+    description: "Desired-state generator for AWS SSO profiles"
+    skip_upload: auto

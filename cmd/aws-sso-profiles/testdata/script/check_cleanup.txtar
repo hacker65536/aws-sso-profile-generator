@@ -1,0 +1,54 @@
+# check (analyze/auto/manual/duplicates) and cleanup --session parity
+env AWS_CONFIG_FILE=$WORK/aws_config
+
+# analyze: 3 total, 2 managed, 1 manual
+exec aws-sso-profiles check analyze -c config.yaml
+stdout 'Total: 3'
+stdout 'Auto \(managed\): 2'
+stdout 'Manual: 1'
+
+# manual lists the hand-written profile only
+exec aws-sso-profiles check manual -c config.yaml
+stdout 'hand-written'
+! stdout 'awssso-'
+
+# cleanup --session removes only that session's managed profile, keeps the other
+exec aws-sso-profiles cleanup -c config.yaml --session other --yes
+stdout 'Removed'
+grep '\[profile awssso-a-1:RO\]' aws_config
+! grep '\[profile awssso-b-2:RO\]' aws_config
+grep '\[profile hand-written\]' aws_config
+
+-- config.yaml --
+sso:
+  session: main
+defaults:
+  prefix: awssso
+
+-- aws_config --
+[sso-session main]
+sso_start_url = https://x/start
+sso_region = us-east-1
+
+[profile hand-written]
+region = us-west-2
+
+# AWS_SSO_CONFIG_GENERATOR:awssso START 2026/01/01 00:00:00
+# managed by aws-sso-profiles (dev) — do not edit; config-sha256=-
+
+[profile awssso-a-1:RO]
+sso_session = main
+sso_account_id = 1
+sso_role_name = RO
+region = us-east-1
+output = json
+cli_pager =
+
+[profile awssso-b-2:RO]
+sso_session = other
+sso_account_id = 2
+sso_role_name = RO
+region = us-east-1
+output = json
+cli_pager =
+# AWS_SSO_CONFIG_GENERATOR:awssso END 2026/01/01 00:00:00

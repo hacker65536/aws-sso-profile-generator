@@ -1,0 +1,27 @@
+# init writes config + [sso-session]; refuses to clobber without --force
+env AWS_CONFIG_FILE=$WORK/aws_config
+
+# fresh init (non-interactive via flags)
+exec aws-sso-profiles init -c out.yaml --session s --start-url https://x/start --region us-east-1 --prefix awspoc
+stdout 'Wrote out.yaml'
+stdout 'Wrote \[sso-session s\]'
+grep 'prefix: awspoc' out.yaml
+grep '\[sso-session s\]' aws_config
+grep 'sso_start_url = https://x/start' aws_config
+
+# second init must NOT clobber the existing config
+! exec aws-sso-profiles init -c out.yaml --session s --start-url https://x/start --region us-east-1
+stderr 'already exists'
+
+# a customization survives the refused second init
+cp out.yaml out.snap
+! exec aws-sso-profiles init -c out.yaml --session s --start-url https://x/start --region us-east-1
+cmp out.yaml out.snap
+
+# --force allows overwrite
+exec aws-sso-profiles init -c out.yaml --force --session s --start-url https://x/start --region us-east-1 --prefix awssso
+grep 'prefix: awssso' out.yaml
+
+-- aws_config --
+[default]
+region = us-east-1

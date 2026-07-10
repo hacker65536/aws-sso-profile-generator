@@ -1,0 +1,41 @@
+# Guards: name-collision detection (proposal 3) and org cross-check (proposal 4)
+env AWS_CONFIG_FILE=$WORK/aws_config
+env ASP_FAKE_INVENTORY=$WORK/inv.json
+
+# Template lacking {account_id}/{role} causes collisions -> plan errors
+! exec aws-sso-profiles plan -c collide.yaml
+stderr 'collision'
+
+# Config start_url disagreeing with the [sso-session] block -> plan aborts
+! exec aws-sso-profiles plan -c wrongorg.yaml
+stderr 'org mismatch'
+
+# schema command prints the embedded schema
+exec aws-sso-profiles schema -c collide.yaml
+stdout 'aws-sso-profiles config'
+
+-- collide.yaml --
+sso:
+  session: test-session
+defaults:
+  prefix: awssso
+  template: "{prefix}-{account_name}"
+
+-- wrongorg.yaml --
+sso:
+  session: test-session
+  start_url: https://WRONG.awsapps.com/start
+defaults:
+  prefix: awssso
+
+-- aws_config --
+[sso-session test-session]
+sso_start_url = https://test.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+-- inv.json --
+[
+ {"account":{"account_id":"1","account_name":"acct one"},"roles":["RoleA","RoleB"]},
+ {"account":{"account_id":"2","account_name":"acct one"},"roles":["RoleA"]}
+]

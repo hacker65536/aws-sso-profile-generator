@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hacker65536/aws-sso-profile-generator/schema.json",
+  "title": "aws-sso-profiles config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "aws_config_file": {
+      "type": "string",
+      "description": "Target ~/.aws/config file (env AWS_CONFIG_FILE equivalent). Split per org to isolate."
+    },
+    "sso": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session": { "type": "string", "description": "[sso-session NAME]; empty = first in file order" },
+        "start_url": { "type": "string", "description": "admin-provided seed; cross-checked against the session block" },
+        "region": { "type": "string", "description": "admin-provided SSO API region seed" }
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prefix": { "type": "string", "description": "org identifier; must be unique per org" },
+        "normalize": { "type": "string", "enum": ["minimal", "full"] },
+        "template": { "type": "string", "description": "profile-name template using {prefix} {account_name} {account_id} {role}" },
+        "settings": { "$ref": "#/$defs/settings", "description": "key/values written into every profile (region, output, cli_pager, or any AWS CLI profile key)" }
+      }
+    },
+    "select": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": { "type": "array", "items": { "$ref": "#/$defs/rule" } },
+        "exclude": { "type": "array", "items": { "$ref": "#/$defs/rule" } }
+      }
+    },
+    "overrides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["match"],
+        "properties": {
+          "match": { "$ref": "#/$defs/rule" },
+          "settings": { "$ref": "#/$defs/settings" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "account": { "type": "string" },
+        "role": { "type": "string" }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "profile key/values; values must be strings (quote numbers, e.g. \"3600\")",
+      "additionalProperties": { "type": "string" }
+    }
+  }
+}

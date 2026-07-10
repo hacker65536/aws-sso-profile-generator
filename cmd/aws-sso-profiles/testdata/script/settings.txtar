@@ -1,0 +1,61 @@
+# profile settings: custom defaults + arbitrary key + per-account override
+env AWS_CONFIG_FILE=$WORK/aws_config
+env ASP_FAKE_INVENTORY=$WORK/inv.json
+
+exec aws-sso-profiles apply -c config.yaml
+stdout 'Applied'
+
+# default settings applied to the non-prod account (output=yaml, duration_seconds, region from defaults)
+grep '\[profile awssso-dev-1:Admin\]' aws_config
+grep 'output = yaml' aws_config
+grep 'duration_seconds = 3600' aws_config
+grep 'region = us-east-1' aws_config
+
+# override region for prod-* only
+grep 'region = ap-northeast-1' aws_config
+
+# identity keys still present and tool-owned
+grep 'sso_session = s' aws_config
+
+# idempotent
+cp aws_config snap
+exec aws-sso-profiles apply -c config.yaml
+stdout 'No changes'
+cmp aws_config snap
+
+# rejecting an identity key in settings
+! exec aws-sso-profiles validate -c bad.yaml
+stderr 'sso_session'
+
+-- config.yaml --
+sso:
+  session: s
+defaults:
+  prefix: awssso
+  settings:
+    region: us-east-1
+    output: yaml
+    cli_pager: ""
+    duration_seconds: "3600"
+overrides:
+  - match: { account: "prod-*", role: "*" }
+    settings:
+      region: ap-northeast-1
+
+-- bad.yaml --
+sso:
+  session: s
+defaults:
+  settings:
+    sso_session: hacked
+
+-- aws_config --
+[sso-session s]
+sso_start_url = https://x/start
+sso_region = us-east-1
+
+-- inv.json --
+[
+ {"account":{"account_id":"1","account_name":"dev"},"roles":["Admin"]},
+ {"account":{"account_id":"2","account_name":"prod-app"},"roles":["Admin"]}
+]
