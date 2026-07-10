@@ -138,7 +138,9 @@ func initCmd() *cobra.Command {
 				fmt.Fprintf(cmd.OutOrStdout(), "Wrote [sso-session %s] to %s\n", session, awsPath)
 			}
 
-			if err := os.WriteFile(cfgPath, []byte(initYAML(awsFile, session, startURL, region, prefix)), 0o644); err != nil {
+			// 0o600: the policy file records the SSO start URL, region and org
+			// prefix — not secrets, but org-identifying, so keep it owner-only.
+			if err := os.WriteFile(cfgPath, []byte(initYAML(awsFile, session, startURL, region, prefix)), 0o600); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s\n", cfgPath)

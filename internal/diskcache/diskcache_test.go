@@ -66,6 +66,18 @@ func TestClear(t *testing.T) {
 	}
 }
 
+func TestNewDefaultDirUsesUserCache(t *testing.T) {
+	t.Setenv("CACHE_DIR", "") // force the default path
+	ucd, err := os.UserCacheDir()
+	if err != nil {
+		t.Skip("no user cache dir on this platform")
+	}
+	c := New()
+	if want := filepath.Join(ucd, "aws-sso-profiles"); c.Dir != want {
+		t.Errorf("default cache dir = %q, want %q", c.Dir, want)
+	}
+}
+
 func TestNewFromEnv(t *testing.T) {
 	t.Setenv("CACHE_DIR", "/tmp/asp-cache-test")
 	t.Setenv("CACHE_EXPIRY_HOURS", "1")

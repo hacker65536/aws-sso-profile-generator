@@ -69,6 +69,15 @@ func TestSettingsRejectsIdentityKey(t *testing.T) {
 	}
 }
 
+func TestSettingsRejectsInjectionValue(t *testing.T) {
+	// A newline in a settings value would splice an extra line into the managed
+	// INI block; checkSettings must reject it (schema still sees a valid string).
+	_, err := Parse([]byte("defaults:\n  settings:\n    region: \"us-east-1\\ncredential_process = /bin/sh\"\n"))
+	if err == nil {
+		t.Error("expected INI-injection error for newline in settings value")
+	}
+}
+
 func TestSettingsRejectsNonStringValue(t *testing.T) {
 	// unquoted number must fail schema (values must be strings)
 	_, err := Parse([]byte("defaults:\n  settings:\n    duration_seconds: 3600\n"))

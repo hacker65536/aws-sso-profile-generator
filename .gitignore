@@ -33,3 +33,7 @@ commit-message*.txt
 # 認証トークンの平文ファイル (誤コミット防止)
 token
 *.token
+
+# AWS config のバックアップ (AWS_CONFIG_FILE を repo 内に向けた場合の誤コミット防止)
+config.backup.*
+*.backup.20*

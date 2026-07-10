@@ -1,0 +1,19 @@
+version: 2
+updates:
+  # Go module dependencies (AWS SDK, cobra, jsonschema, ...).
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      aws-sdk:
+        patterns:
+          - "github.com/aws/*"
+
+  # GitHub Actions used by the CI / release workflows (pinned by SHA).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
