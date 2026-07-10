@@ -5,7 +5,7 @@ COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
-.PHONY: build test race vet fmt fmt-check lint vuln check completions clean
+.PHONY: build test race vet fmt fmt-check lint vuln check completions demo clean
 
 build: ## Build the binary
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) $(PKG)
@@ -39,6 +39,9 @@ completions: build ## Generate shell completions into ./completions-go
 	./$(BINARY) completion bash > completions-go/$(BINARY).bash
 	./$(BINARY) completion zsh  > completions-go/$(BINARY).zsh
 	./$(BINARY) completion fish > completions-go/$(BINARY).fish
+
+demo: ## Record the terminal demo GIF into demo/aws-sso-profiles.gif (needs: vhs, ffmpeg)
+	bash demo/record.sh
 
 clean:
 	rm -f $(BINARY)

@@ -1,0 +1,10 @@
+[default]
+region = ap-northeast-1
+
+[sso-session my-sso]
+sso_start_url = https://my.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[profile hand-written]
+region = us-west-2
