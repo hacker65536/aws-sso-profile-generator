@@ -29,3 +29,7 @@ commit-message*.txt
 
 # ローカルの実設定 (実アカウント/URL を含みうる)
 /.aws-sso-profiles.yaml
+
+# 認証トークンの平文ファイル (誤コミット防止)
+token
+*.token

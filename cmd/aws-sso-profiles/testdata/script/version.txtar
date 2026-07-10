@@ -1,0 +1,19 @@
+# version subcommand: works without config, human and json output.
+
+# Human output carries the build-time defaults (version=dev in test builds).
+exec aws-sso-profiles version
+stdout 'aws-sso-profiles dev'
+stdout 'commit:'
+stdout 'built:'
+stdout 'go:'
+stdout 'platform:'
+
+# JSON output is valid and keyed as expected.
+exec aws-sso-profiles version -o json
+stdout '"version": "dev"'
+stdout '"commit": "none"'
+stdout '"platform":'
+
+# The --version flag (cobra) still works independently of the subcommand.
+exec aws-sso-profiles --version
+stdout 'dev'

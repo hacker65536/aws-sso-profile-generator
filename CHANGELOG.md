@@ -2,6 +2,23 @@
 
 すべての特記すべき変更点をここに記録します。フォーマットは [Keep a Changelog](https://keepachangelog.com/) を参考にしています。
 
+> **v2.0.0 以降は Go 実装（`aws-sso-profiles`）が本体です。** v1.x は Bash 版の履歴で、Bash 版は撤去済みです（コードは git 履歴を参照）。
+
+## [v2.0.0] - Go 実装への全面移行
+
+### Changed
+- **実装を Go 製の desired-state CLI (`aws-sso-profiles`) に全面移行。** 宣言的 `.aws-sso-profiles.yaml` を single source of truth とし、`plan` / `apply`（Terraform 流・冪等・構造化出力・exit code）で管理する。
+- AWS SDK for Go v2 直呼びにより `aws` CLI / jq / column への依存を排し、単一バイナリ化（トークン取得の `aws sso login` のみ AWS CLI v2 に委譲）。
+
+### Added
+- `plan` の差分に **changed** と **drift**（管理ブロック内の手編集）検知を追加。
+- `--output json` と Terraform 流 exit code（`0`=差分なし / `2`=差分あり or drift / `1`=エラー）。
+- 埋め込み JSON Schema（`schema` コマンド）、`init` ウィザード、prefix スコープの管理ブロックによるマルチ org 対応。
+- `version` サブコマンド（version / commit / build date / go / os-arch を human・json 出力）と build メタ情報の埋め込み。
+
+### Removed
+- Bash 実装一式（`generate-sso-profiles.sh` / `check.sh` / `cleanup-generated-profiles.sh` / `lib/` / `test/` / `completions/`）、`CACHE_USAGE.md`、shellcheck CI を撤去。
+
 ## [v1.21.0] - 出力の英語化・整形
 
 ### Changed

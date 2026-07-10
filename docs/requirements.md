@@ -2,7 +2,7 @@
 
 > このドキュメントは **何を・なぜ**（what / why）を扱う要件仕様です。
 > **どう作られているか**（how / アーキテクチャ）は [implementation.md](implementation.md) を参照してください。
-> ユーザー向けの使い方・config スキーマの実例は [../README-go.md](../README-go.md) にあります。
+> ユーザー向けの使い方・config スキーマの実例は [../README.md](../README.md) にあります。
 
 ## 1. 目的 / 背景
 
@@ -10,7 +10,7 @@
 `~/.aws/config` の AWS SSO プロファイル群を **plan / apply**（Terraform 流・冪等・構造化出力・
 exit code）で管理する CLI です。
 
-旧来の Bash 版（`generate-sso-profiles.sh` ほか）は成熟していましたが、本質的な弱点がありました:
+旧来の Bash 版（`generate-sso-profiles.sh` ほか。本リポジトリからは撤去済み）は成熟していましたが、本質的な弱点がありました:
 
 - **判断がファイルに残らない**: 対話 5 問（prefix / アカウント数 / region / 正規化 / y-n）＋
   2 つのフィルタで運用しており、「なぜこの構成なのか」が実行のたびに揮発する。
@@ -80,7 +80,7 @@ exit code）で管理する CLI です。
 - `select.include` / `select.exclude`: account / role の glob フィルタ。
 - `overrides[]`: `match` にマッチした profile の `settings` を上書き/追加マージ。
 
-実際の YAML 例とフィールド説明は [../README-go.md](../README-go.md#config-スキーマaws-sso-profilesyaml) を参照。
+実際の YAML 例とフィールド説明は [../README.md](../README.md#config-スキーマaws-sso-profilesyaml) を参照。
 
 ### 3.3 命名テンプレと正規化
 
