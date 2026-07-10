@@ -21,3 +21,11 @@ commit-message*.txt
 
 # AWS SSO API レスポンスのランタイムキャッシュ (実アカウントID/セッション情報を含むため)
 .aws-sso-cache/
+
+# Go ビルド成果物 (Phase 1: Go 版 desired-state CLI)
+/aws-sso-profiles
+/dist/
+/completions-go/
+
+# ローカルの実設定 (実アカウント/URL を含みうる)
+/.aws-sso-profiles.yaml

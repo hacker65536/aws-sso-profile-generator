@@ -1,0 +1,50 @@
+# Drift (proposal 6): a hand-added key inside the managed block is reported by
+# plan (exit 2) and healed by apply.
+env AWS_CONFIG_FILE=$WORK/aws_config
+env ASP_FAKE_INVENTORY=$WORK/inv.json
+
+# plan flags the hand-edit as drift and exits non-zero
+! exec aws-sso-profiles plan -c config.yaml
+stdout 'Drift'
+stdout 'role_arn'
+
+# apply re-canonicalizes and drops the hand-added key
+exec aws-sso-profiles apply -c config.yaml
+stdout 'Applied'
+! grep 'role_arn' aws_config
+
+# second plan is clean
+exec aws-sso-profiles plan -c config.yaml
+stdout '0 to add'
+
+-- config.yaml --
+sso:
+  session: s
+defaults:
+  prefix: awssso
+  settings:
+    region: us-east-1
+
+-- aws_config --
+[sso-session s]
+sso_start_url = https://x/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+# AWS_SSO_CONFIG_GENERATOR:awssso START 2026/01/01 00:00:00
+# managed by aws-sso-profiles (dev) — do not edit; config-sha256=-
+
+[profile awssso-acct_one-1:RoleA]
+sso_session = s
+sso_account_id = 1
+sso_role_name = RoleA
+region = us-east-1
+output = json
+cli_pager =
+role_arn = arn:aws:iam::1:role/hand-added
+# AWS_SSO_CONFIG_GENERATOR:awssso END 2026/01/01 00:00:00
+
+-- inv.json --
+[
+ {"account":{"account_id":"1","account_name":"acct one"},"roles":["RoleA"]}
+]

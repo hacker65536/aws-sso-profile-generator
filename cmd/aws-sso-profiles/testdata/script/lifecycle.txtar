@@ -1,0 +1,66 @@
+# End-to-end: validate -> plan (diff) -> apply -> idempotent apply -> plan (clean)
+env AWS_CONFIG_FILE=$WORK/aws_config
+env ASP_FAKE_INVENTORY=$WORK/inv.json
+
+# validate passes
+exec aws-sso-profiles validate -c config.yaml
+stdout 'config valid'
+
+# plan shows 3 additions and exits non-zero (diff present, exit 2)
+! exec aws-sso-profiles plan -c config.yaml
+stdout 'Plan: 3 to add'
+
+# plan must not modify the config file
+exec aws-sso-profiles validate -c config.yaml
+! grep 'AWS_SSO_CONFIG_GENERATOR' aws_config
+
+# apply writes the managed block
+exec aws-sso-profiles apply -c config.yaml
+stdout 'Applied'
+grep '# AWS_SSO_CONFIG_GENERATOR:awssso START' aws_config
+grep '\[profile awssso-acct_one-100000000001:AWSReadOnlyAccess\]' aws_config
+grep '\[profile hand-written\]' aws_config
+
+# second apply is a byte-stable no-op
+cp aws_config aws_config.snapshot
+exec aws-sso-profiles apply -c config.yaml
+stdout 'No changes'
+cmp aws_config aws_config.snapshot
+
+# plan after apply reports no diff and exits 0
+exec aws-sso-profiles plan -c config.yaml
+stdout '0 to add'
+
+# cleanup removes the managed block but keeps the hand-written profile
+exec aws-sso-profiles cleanup -c config.yaml --yes
+stdout 'Removed'
+! grep 'AWS_SSO_CONFIG_GENERATOR' aws_config
+grep '\[profile hand-written\]' aws_config
+
+-- config.yaml --
+sso:
+  session: test-session
+  start_url: https://test.awsapps.com/start
+  region: us-east-1
+defaults:
+  prefix: awssso
+  settings:
+    region: us-east-1
+
+-- aws_config --
+[default]
+region = ap-northeast-1
+
+[sso-session test-session]
+sso_start_url = https://test.awsapps.com/start
+sso_region = us-east-1
+sso_registration_scopes = sso:account:access
+
+[profile hand-written]
+region = us-west-2
+
+-- inv.json --
+[
+ {"account":{"account_id":"100000000001","account_name":"acct one"},"roles":["AWSReadOnlyAccess","AWSAdministratorAccess"]},
+ {"account":{"account_id":"100000000002","account_name":"acct two"},"roles":["AWSReadOnlyAccess"]}
+]
