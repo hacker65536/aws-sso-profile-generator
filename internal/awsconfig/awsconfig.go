@@ -349,6 +349,16 @@ func ManagedProfileNames(content string) map[string]bool {
 
 // ---- IO: backup + atomic write ----
 
+// ownerOnly strips group/other permission bits, keeping the file readable and
+// writable by its owner only (preserving the owner's existing rwx bits).
+func ownerOnly(mode os.FileMode) os.FileMode {
+	perm := mode.Perm() &^ os.FileMode(0o077)
+	if perm&0o600 == 0 {
+		perm |= 0o600 // guarantee the owner can still read/write it back
+	}
+	return mode&^os.FileMode(0o777) | perm
+}
+
 // Backup copies path to path.backup.<timestamp> and prunes to the newest keep.
 // If path does not exist, it is a no-op returning an empty backup path.
 func Backup(path string, keep int) (string, error) {
@@ -364,6 +374,7 @@ func Backup(path string, keep int) (string, error) {
 	if info != nil {
 		mode = info.Mode()
 	}
+	mode = ownerOnly(mode) // never let a backup be group/other-readable
 	bak := path + ".backup." + time.Now().Format("20060102_150405")
 	if err := os.WriteFile(bak, data, mode); err != nil {
 		return "", err
@@ -393,6 +404,10 @@ func WriteAtomic(path, content string) error {
 	if info, err := os.Stat(path); err == nil {
 		mode = info.Mode()
 	}
+	// Mode preservation must never *loosen*: an existing 0644 ~/.aws/config is
+	// tightened to owner-only here, since the managed block carries account/role
+	// identifiers that should not be group/other-readable.
+	mode = ownerOnly(mode)
 	tmp, err := os.CreateTemp(dir, ".aws-sso-profiles-*.tmp")
 	if err != nil {
 		return err

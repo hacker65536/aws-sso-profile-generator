@@ -52,6 +52,25 @@ func TestBuildDesired(t *testing.T) {
 	}
 }
 
+func TestBuildDesiredRejectsInjection(t *testing.T) {
+	cases := []struct {
+		name string
+		inv  []ssoapi.AccountRoles
+	}{
+		{"role newline", []ssoapi.AccountRoles{{Account: ssoapi.Account{ID: "1", Name: "acct"},
+			Roles: []string{"Admin\n[profile evil]\ncredential_process = /bin/sh"}}}},
+		{"role bracket", []ssoapi.AccountRoles{{Account: ssoapi.Account{ID: "1", Name: "acct"},
+			Roles: []string{"Ad]min"}}}},
+		{"account id non-digit", []ssoapi.AccountRoles{{Account: ssoapi.Account{ID: "12a", Name: "acct"},
+			Roles: []string{"Admin"}}}},
+	}
+	for _, tc := range cases {
+		if _, err := BuildDesired(tc.inv, params()); err == nil {
+			t.Errorf("%s: expected validation error, got none", tc.name)
+		}
+	}
+}
+
 func TestBuildDesiredCollision(t *testing.T) {
 	p := params()
 	p.Template = "{prefix}-{account_name}" // drops account_id + role → guaranteed collisions

@@ -131,11 +131,22 @@ func (c *Config) semantic() error {
 	return nil
 }
 
-// checkSettings rejects tool-owned identity keys in a user settings map.
+// checkSettings rejects tool-owned identity keys in a user settings map, and
+// guards against INI injection: a key or value containing a newline or square
+// bracket could splice an extra stanza/line (e.g. `credential_process = ...`)
+// into ~/.aws/config when the block is rendered. The YAML is user-owned, but
+// this catches footguns in shared or machine-generated policy files.
 func checkSettings(where string, settings map[string]string) error {
-	for k := range settings {
+	const unsafe = "\n\r[]"
+	for k, v := range settings {
 		if plan.IdentityKeys[k] {
 			return fmt.Errorf("%s must not set the tool-owned key %q (identity keys are managed automatically)", where, k)
+		}
+		if strings.ContainsAny(k, unsafe) {
+			return fmt.Errorf("%s has a key containing a newline or square bracket (INI-injection guard): %q", where, k)
+		}
+		if strings.ContainsAny(v, unsafe) {
+			return fmt.Errorf("%s value for key %q contains a newline or square bracket (INI-injection guard)", where, k)
 		}
 	}
 	return nil

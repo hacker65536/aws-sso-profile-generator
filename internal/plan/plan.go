@@ -7,6 +7,7 @@ package plan
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -19,6 +20,44 @@ import (
 // IdentityKeys are tool-owned and must never appear in user settings.
 var IdentityKeys = map[string]bool{
 	"sso_session": true, "sso_account_id": true, "sso_role_name": true,
+}
+
+// Validation charsets for AWS-sourced identity fields and the rendered profile
+// name. These are a defense-in-depth guard: values flow verbatim from the SSO
+// Portal API into ~/.aws/config, so a compromised or spoofed endpoint returning
+// a role name (or an account name that survives normalization) containing a
+// newline or `]` could otherwise break out of the `[profile NAME]` header and
+// inject an arbitrary stanza (e.g. `credential_process = /bin/evil`) — arbitrary
+// code execution the next time that profile is used. We fail closed rather than
+// trust AWS's server-side input validation as our only line of defense.
+var (
+	// accountIDRe accepts digits only. AWS account IDs are canonically 12
+	// digits, but we intentionally do not pin the length: the point here is to
+	// forbid INI-structural characters (a digit string can never break INI),
+	// and short synthetic IDs are used by tests and the ASP_FAKE_INVENTORY hook.
+	accountIDRe = regexp.MustCompile(`^[0-9]+$`)
+	// roleNameRe mirrors the AWS permission-set / role name charset; it cannot
+	// contain a newline, `[`, or `]`.
+	roleNameRe = regexp.MustCompile(`^[A-Za-z0-9+=,.@_-]+$`)
+	// profileNameRe bounds the fully-rendered profile name (template output).
+	// It permits the characters the default template emits (`:` and `/` in
+	// addition to the role charset) while excluding newline and brackets.
+	profileNameRe = regexp.MustCompile(`^[A-Za-z0-9+=,.@:/_-]+$`)
+)
+
+// validateProfile rejects any identity value or rendered name that could break
+// out of the managed INI block. Called for every desired profile before render.
+func validateProfile(p Profile) error {
+	if !accountIDRe.MatchString(p.AccountID) {
+		return fmt.Errorf("account id %q is not all digits — refusing to write it into ~/.aws/config", p.AccountID)
+	}
+	if !roleNameRe.MatchString(p.RoleName) {
+		return fmt.Errorf("role name %q contains characters outside [A-Za-z0-9+=,.@_-] — refusing to write it into ~/.aws/config", p.RoleName)
+	}
+	if !profileNameRe.MatchString(p.Name) {
+		return fmt.Errorf("rendered profile name %q contains characters unsafe in an INI header; adjust defaults.template or defaults.prefix", p.Name)
+	}
+	return nil
 }
 
 // Params carries the config policy needed to build desired profiles.
@@ -63,6 +102,9 @@ func BuildDesired(inv []ssoapi.AccountRoles, p Params) ([]Profile, error) {
 			}
 			settings := mergeSettings(p.DefaultSettings, p.Overrides.Settings(ar.Account.Name, role))
 			prof := Profile{Name: name, SSOSession: p.SSOSession, AccountID: ar.Account.ID, RoleName: role, Settings: settings}
+			if err := validateProfile(prof); err != nil {
+				return nil, err
+			}
 			if prev, dup := seen[name]; dup {
 				collisions = append(collisions, fmt.Sprintf("%q (from %s:%s and %s:%s)",
 					name, prev.AccountID, prev.RoleName, prof.AccountID, prof.RoleName))

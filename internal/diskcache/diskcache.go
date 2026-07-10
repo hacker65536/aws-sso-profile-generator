@@ -25,12 +25,21 @@ type Cache struct {
 	TTL time.Duration
 }
 
-// New builds a Cache from CACHE_DIR (default ./.aws-sso-cache) and
-// CACHE_EXPIRY_HOURS (default 24).
+// New builds a Cache from CACHE_DIR and CACHE_EXPIRY_HOURS (default 24).
+//
+// When CACHE_DIR is unset the cache lives under the user cache directory
+// (~/.cache/aws-sso-profiles on Linux, ~/Library/Caches/... on macOS) rather
+// than a CWD-relative ./.aws-sso-cache. The snapshot contains real account IDs
+// and names, so anchoring it to a fixed per-user location avoids scattering
+// copies across working directories where they could be accidentally committed.
 func New() *Cache {
 	dir := os.Getenv("CACHE_DIR")
 	if dir == "" {
-		dir = ".aws-sso-cache"
+		if ucd, err := os.UserCacheDir(); err == nil {
+			dir = filepath.Join(ucd, "aws-sso-profiles")
+		} else {
+			dir = ".aws-sso-cache" // last-resort fallback if the user cache dir is undiscoverable
+		}
 	}
 	hours := 24.0
 	if v := os.Getenv("CACHE_EXPIRY_HOURS"); v != "" {
@@ -42,6 +51,8 @@ func New() *Cache {
 }
 
 func key(startURL string) string {
+	// md5 is used purely as a non-cryptographic cache-key digest (byte-for-byte
+	// parity with the original bash tool's key); it is not a security control.
 	sum := md5.Sum([]byte(startURL))
 	return hex.EncodeToString(sum[:])[:8]
 }
@@ -81,11 +92,23 @@ func (c *Cache) Save(startURL string, inv []ssoapi.AccountRoles) error {
 		return err
 	}
 	p := c.path(startURL)
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+	// Write via a randomized temp name (not a fixed p+".tmp") so a co-user in
+	// the cache dir cannot pre-create/symlink the temp path to redirect the
+	// write. os.CreateTemp makes the file 0600; the rename is atomic.
+	tmp, err := os.CreateTemp(c.Dir, "inventory-*.json.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, p)
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, p)
 }
 
 // Clear removes all cached inventory snapshots.
