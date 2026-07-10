@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,8 +19,13 @@ import (
 	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
 )
 
-// version is overridden at build time via -ldflags "-X main.version=...".
-var version = "dev"
+// version, commit and date are overridden at build time via
+// -ldflags "-X main.version=... -X main.commit=... -X main.date=...".
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
 
 var exitCode int
 
@@ -47,7 +53,7 @@ func rootCmd() *cobra.Command {
 	}
 	root.PersistentFlags().StringP("config", "c", app.DefaultConfigPath, "path to .aws-sso-profiles.yaml")
 	root.PersistentFlags().StringP("output", "o", "human", "output format: human|json")
-	root.AddCommand(initCmd(), listCmd(), planCmd(), applyCmd(), validateCmd(), schemaCmd(), cleanupCmd(), checkCmd())
+	root.AddCommand(initCmd(), listCmd(), planCmd(), applyCmd(), validateCmd(), schemaCmd(), cleanupCmd(), checkCmd(), versionCmd())
 	return root
 }
 
@@ -298,6 +304,37 @@ func schemaCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := cmd.OutOrStdout().Write(config.Schema())
 			return err
+		},
+	}
+}
+
+// ---- version ----
+
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version and build information",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			info := struct {
+				Version  string `json:"version"`
+				Commit   string `json:"commit"`
+				Date     string `json:"date"`
+				Go       string `json:"go"`
+				Platform string `json:"platform"`
+			}{
+				Version:  version,
+				Commit:   commit,
+				Date:     date,
+				Go:       runtime.Version(),
+				Platform: runtime.GOOS + "/" + runtime.GOARCH,
+			}
+			if out, _ := cmd.Flags().GetString("output"); out == "json" {
+				return writeJSON(cmd, info)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(),
+				"aws-sso-profiles %s\n  commit:   %s\n  built:    %s\n  go:       %s\n  platform: %s\n",
+				info.Version, info.Commit, info.Date, info.Go, info.Platform)
+			return nil
 		},
 	}
 }
