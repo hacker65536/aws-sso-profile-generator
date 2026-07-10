@@ -26,6 +26,9 @@ import (
 // DefaultConfigPath is used when --config is not given.
 const DefaultConfigPath = ".aws-sso-profiles.yaml"
 
+// ConfigPathEnv overrides the default config path when --config is not given.
+const ConfigPathEnv = "AWS_SSO_PROFILES_CONFIG"
+
 // FakeInventoryEnv, when set to a JSON file path, bypasses AWS entirely and
 // loads the inventory from disk. Used by the E2E tests to drive the real binary
 // deterministically without network or credentials.
@@ -49,6 +52,7 @@ func Load(configPath, version string) (*App, error) {
 	if configPath == "" {
 		configPath = DefaultConfigPath
 	}
+	configPath = expandHome(configPath) // ~ 展開（env/flag/デフォルトのどの経路でも効かせる）
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("read config %s: %w", configPath, err)
