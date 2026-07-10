@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
 )
 
 const good = `

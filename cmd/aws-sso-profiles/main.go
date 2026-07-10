@@ -13,10 +13,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/app"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/config"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
+	"github.com/hacker65536/aws-sso-profiles/internal/app"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/config"
+	"github.com/hacker65536/aws-sso-profiles/internal/plan"
 )
 
 // version, commit and date are overridden at build time via

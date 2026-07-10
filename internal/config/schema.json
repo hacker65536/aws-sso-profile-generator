@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/hacker65536/aws-sso-profile-generator/schema.json",
+  "$id": "https://github.com/hacker65536/aws-sso-profiles/schema.json",
   "title": "aws-sso-profiles config",
   "type": "object",
   "additionalProperties": false,

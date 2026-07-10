@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssoapi"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssoapi"
 )
 
 func sampleInv() []ssoapi.AccountRoles {

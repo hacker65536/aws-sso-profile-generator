@@ -14,13 +14,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/config"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/diskcache"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/render"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssoapi"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/ssotoken"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/config"
+	"github.com/hacker65536/aws-sso-profiles/internal/diskcache"
+	"github.com/hacker65536/aws-sso-profiles/internal/plan"
+	"github.com/hacker65536/aws-sso-profiles/internal/render"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssoapi"
+	"github.com/hacker65536/aws-sso-profiles/internal/ssotoken"
 )
 
 // DefaultConfigPath is used when --config is not given.

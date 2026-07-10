@@ -12,10 +12,10 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/awsconfig"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/naming"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
-	"github.com/hacker65536/aws-sso-profile-generator/internal/selector"
+	"github.com/hacker65536/aws-sso-profiles/internal/awsconfig"
+	"github.com/hacker65536/aws-sso-profiles/internal/naming"
+	"github.com/hacker65536/aws-sso-profiles/internal/plan"
+	"github.com/hacker65536/aws-sso-profiles/internal/selector"
 )
 
 //go:embed schema.json

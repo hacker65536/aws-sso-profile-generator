@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hacker65536/aws-sso-profile-generator/internal/plan"
+	"github.com/hacker65536/aws-sso-profiles/internal/plan"
 )
 
 var update = flag.Bool("update", false, "update golden files")
