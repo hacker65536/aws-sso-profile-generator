@@ -14,7 +14,7 @@
 
 シナリオは排他ではなく積み上げです。シナリオ 2〜3 にはシナリオ 1 の基本手順が、シナリオ 5 にはシナリオ 4 の仕組みがそのまま含まれます。
 
-導入後、生成した profile を Claude などの AI エージェントに使わせる場合は[生成した profile を AI エージェントから使う（CLAUDE.md への組み込み）](#生成した-profile-を-ai-エージェントから使うclaudemd-への組み込み)も参照してください。
+導入後、AWS アカウントやロールが増減したときの再実行手順は[導入後の定常運用（アカウント / ロールが増減したとき）](#導入後の定常運用アカウント--ロールが増減したとき)を参照してください。生成した profile を Claude などの AI エージェントに使わせる場合は[生成した profile を AI エージェントから使う（CLAUDE.md への組み込み）](#生成した-profile-を-ai-エージェントから使うclaudemd-への組み込み)も参照してください。
 
 ## 共通の前提と流れ
 
@@ -301,6 +301,51 @@ aws-sso-profiles plan && aws-sso-profiles apply
 
 - SSO トークンキャッシュは org 間でも共有ディレクトリ（`~/.aws/sso/cache/`）ですが、セッション単位で管理されるため干渉しません。
 - 各 YAML に `sso.start_url` を書いておくと、org と YAML の組み合わせ違いを `validate` / `plan` が検出できます。
+
+---
+
+## 導入後の定常運用（アカウント / ロールが増減したとき）
+
+導入はシナリオ 1〜5 で一度きりですが、**AWS Organizations にアカウントが増えた・ロール（permission set）の割り当てが増減した**ときの運用がここです。結論から言うと、**インベントリ（accounts × roles）が変わったら `plan` → `apply` を再実行するだけ**。config YAML は基本触りません。冪等なので何度でも安全です。
+
+新アカウント/ロールは「YAML の変更」ではなく「SSO インベントリ側の変化」なので、`init` は不要で `plan`/`apply` に直接合流します（[requirements.md §9](requirements.md#9-ユーザーフロー)）。
+
+**操作**
+
+```bash
+aws sso login --sso-session <name>   # トークン失効時のみ。新アカウントが SSO に見えないときも実行
+aws-sso-profiles plan                # 新規は added、消えたものは removed（差分あれば exit 2）
+aws-sso-profiles apply               # 管理ブロックを冪等更新（apply 前に自動バックアップ）
+aws-sso-profiles plan                # exit 0（差分なし）になることを確認
+```
+
+**差分の読み方**
+
+`plan` の出力カテゴリで何が起きたか分かります。
+
+- **added**: 新しいアカウント、または既存アカウントに増えたロールの profile。
+- **removed**: Organizations から消えたアカウント、または剥奪されたロールの profile（`apply` で管理ブロックから除去）。
+- **changed**: `settings` / template など、既存 profile の中身が変わったもの。
+- **drift**: 管理ブロックを手編集した痕跡。`plan` が可視化し、`apply` が desired state に自己修復します。
+
+**注意点**
+
+- **`--cache` を常用している場合のみ** `--refresh-cache` を付けてインベントリを最新化してください。キャッシュ TTL（既定 24 時間、`CACHE_EXPIRY_HOURS`）内は古いアカウント一覧が返り、増えた分が反映されないためです。`--cache` を使っていなければ毎回ライブ取得なので何もしなくて構いません。
+
+  ```bash
+  aws-sso-profiles plan --refresh-cache     # キャッシュを捨ててライブ再取得
+  ```
+
+- **`select` で絞り込んでいる場合のみ** YAML の編集が要ります。`select.include` を全件（`{ account: "*", role: "*" }`）にしていれば新アカウントは自動で候補に入りますが、`include` を限定している、または `select.exclude`（例 `*sandbox*`）に新アカウントがマッチする場合は、先に YAML を直してから `validate` → `plan` → `apply` します。
+
+- **マルチ org（シナリオ 5）では org ごとに**再実行します。`AWS_CONFIG_FILE` と `AWS_SSO_PROFILES_CONFIG` のペア切替を守ってください。
+
+  ```bash
+  awsorg work && aws-sso-profiles plan && aws-sso-profiles apply
+  awsorg poc  && aws-sso-profiles plan && aws-sso-profiles apply
+  ```
+
+- **定期実行したい場合**: `apply` は非対話・冪等・exit code が明確なので cron 等に載せられます。ただしトークン失効時の `aws sso login` はブラウザ操作を伴うため、無人実行では有効なトークンが前提になる点に留意してください。
 
 ---
 
