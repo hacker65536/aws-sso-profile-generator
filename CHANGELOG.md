@@ -4,6 +4,17 @@
 
 > **v2.0.0 以降は Go 実装（`aws-sso-profiles`）が本体です。** v1.x は Bash 版の履歴で、Bash 版は撤去済みです（コードは git 履歴を参照）。
 
+## [v2.1.0] - config パスの環境変数指定と導入ガイド
+
+### Added
+- **環境変数 `AWS_SSO_PROFILES_CONFIG` で config パスを指定可能に。** 解決順は `-c/--config` 明示指定 > env > 既定 `./.aws-sso-profiles.yaml`（`~` は展開）。マルチ org で `AWS_CONFIG_FILE` とペア切替する運用の土台。
+- **導入シナリオ別ガイド** [docs/setup-guide.md](docs/setup-guide.md)。まっさら / 既存 config あり / 手書き SSO からの移行 / 生成先ファイル分離 / マルチ org の 5 シナリオ別に設定と操作を解説。生成 profile を AI エージェントに使わせる CLAUDE.md テンプレート（単一 org / マルチ org）も同梱。
+- **fzf で `AWS_PROFILE` を切り替える日常利用デモ**（`demo/profile-switch.tape` → `demo/aws-profile-fzf.gif`、README Tips に埋め込み）。`demo/record.sh` は複数 tape 対応になり、録画時に `AWS_SHARED_CREDENTIALS_FILE` を scratch へ隔離。
+- VHS 製ターミナルデモ GIF（plan / apply ライフサイクル）を README トップに埋め込み。
+
+### Changed
+- Go module path を `github.com/hacker65536/aws-sso-profiles` に統一し、リポジトリ名との乖離を解消（`go install` の import path が変わる。バイナリ利用者への影響なし）。
+
 ## [v2.0.0] - Go 実装への全面移行
 
 ### Changed
